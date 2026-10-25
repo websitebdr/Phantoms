@@ -130,12 +130,24 @@ const cwdPublicPath = path.join(process.cwd(), "public");
 app.use(express.static(publicPath));
 app.use(express.static(cwdPublicPath));
 
-// توجيه الصفحة الرئيسية مباشرة إلى index.html
-app.get("/", (req, res) => {
+// قراءة محتوى الواجهة مسبقاً لضمان عملها 100% على Vercel وجميع الاستضافات السحابية
+let HTML = "";
+try {
+  HTML = require("./html.js");
+} catch(e) {
+  try {
+    HTML = fs.readFileSync(path.join(__dirname, "public", "index.html"), "utf8");
+  } catch(e2) {}
+}
+
+// توجيه الصفحة الرئيسية مباشرة
+app.get(["/", "/index.html"], (req, res) => {
+  if (HTML) {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    return res.send(HTML);
+  }
   const p1 = path.join(publicPath, "index.html");
-  const p2 = path.join(cwdPublicPath, "index.html");
   if (fs.existsSync(p1)) return res.sendFile(p1);
-  if (fs.existsSync(p2)) return res.sendFile(p2);
   res.sendFile(path.resolve("public/index.html"));
 });
 
