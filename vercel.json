@@ -1,0 +1,25 @@
+{
+  "version": 2,
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/login",
+      "destination": "/api"
+    },
+    {
+      "source": "/callback",
+      "destination": "/api"
+    },
+    {
+      "source": "/logout",
+      "destination": "/api"
+    },
+    {
+      "source": "/me",
+      "destination": "/api"
+    }
+  ]
+}
