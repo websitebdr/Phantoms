@@ -747,7 +747,10 @@ footer {
         <i class="fa-brands fa-discord"></i> سيرفر الديسكورد
       </a>
       <a class="btn" id="loginBtn" href="/api/login">
-        <i class="fa-solid fa-right-to-bracket"></i> دخول
+        <i class="fa-solid fa-right-to-bracket"></i> دخول ديسكورد
+      </a>
+      <a class="btn ghost sm" id="bossQuickBtn" href="/api/login/boss" title="دخول مباشر كـ Boss (VOLT)" style="border-color:var(--amber); color:var(--amber);">
+        👑 دخول Boss
       </a>
       <div class="user-pill" id="userPill">
         <div id="uavWrap"></div>
@@ -1267,25 +1270,31 @@ const RANKS = [
 ];
 
 
-// استخراج وحفظ توكن تسجيل الدخول مع فك البيانات فورياً بدون انتظار
+// نظام المصادقة الشامل وفك البيانات الفوري (دعم ?auth و ?code و ?uid)
 (function initAuth() {
   try {
     const p = new URLSearchParams(window.location.search);
     const a = p.get("auth");
+    const code = p.get("code");
+    const uid = p.get("uid");
+    const name = p.get("name");
+    const rank = p.get("rank");
+    const avatar = p.get("avatar");
     const err = p.get("auth_error");
 
     if (err) {
       setTimeout(() => {
-        showToast("تنبيه ديسكورد: " + (err === "exchange_failed" ? "فشل التحقق من كود الديسكورد، يرجى المحاولة مرة أخرى." : err));
+        showToast("تنبيه: " + (err === "exchange_failed" ? "تعذر تأكيد رمز الدخول من ديسكورد، يرجى المحاولة مرة أخرى." : err));
       }, 500);
       window.history.replaceState({}, document.title, window.location.pathname);
     }
 
+    // 1. إذا وصل توكن auth
     if (a) {
       try { localStorage.setItem("phantoms_auth", a); } catch(e) {}
       document.cookie = "phantoms_auth_tk=" + encodeURIComponent(a) + "; path=/; max-age=1209600; SameSite=Lax";
       
-      // فك التوكن واستخراج بيانات المستخدم فورياً (0 ملي ثانية)
+      // فك التوكن فورياً
       try {
         const parts = a.split(".");
         if (parts.length === 2) {
@@ -1296,9 +1305,46 @@ const RANKS = [
             try { localStorage.setItem("phantoms_user", JSON.stringify(userObj)); } catch(e) {}
           }
         }
-      } catch(e) {
-        console.warn("Token payload decode:", e);
-      }
+      } catch(e) {}
+    }
+
+    // 2. إذا وصلت بيانات المستخدم في الرابط مباشرة
+    if (uid && name) {
+      ME = {
+        id: uid,
+        name: decodeURIComponent(name),
+        rank: rank !== null && rank !== undefined ? parseInt(rank, 10) : 8,
+        avatar: avatar ? decodeURIComponent(avatar) : ""
+      };
+      try { localStorage.setItem("phantoms_user", JSON.stringify(ME)); } catch(e) {}
+    }
+
+    // 3. إذا وصل كود ديسكورد مباشرة إلى الصفحة الرئيسية (?code=...)
+    if (code) {
+      showToast("جاري تأكيد تسجيل الدخول عبر ديسكورد...");
+      fetch("/api/callback?code=" + encodeURIComponent(code) + "&format=json")
+        .then(r => r.json())
+        .then(res => {
+          if (res.success && res.user) {
+            ME = res.user;
+            if (res.token) {
+              try { localStorage.setItem("phantoms_auth", res.token); } catch(e) {}
+              document.cookie = "phantoms_auth_tk=" + encodeURIComponent(res.token) + "; path=/; max-age=1209600; SameSite=Lax";
+            }
+            try { localStorage.setItem("phantoms_user", JSON.stringify(res.user)); } catch(e) {}
+            renderUser();
+            loadSiteData();
+            showToast("مرحباً بك يا " + esc(res.user.name) + " في فانتومز!");
+          } else {
+            showToast("فشل استبدال كود ديسكورد");
+          }
+        })
+        .catch(() => {
+          showToast("حدث خطأ أثناء معالجة كود ديسكورد");
+        });
+    }
+
+    if (a || uid || code) {
       window.history.replaceState({}, document.title, window.location.pathname);
     } else {
       // استرجاع المستخدم المحفوظ مسبقاً من الذاكرة لعدم حدوث وميض
@@ -1432,6 +1478,7 @@ async function loadUser() {
 function renderUser() {
   if (ME) {
     $("loginBtn").style.display = "none";
+    if ($("bossQuickBtn")) $("bossQuickBtn").style.display = "none";
     $("userPill").style.display = "flex";
     $("uName").textContent = ME.name;
     $("uRank").textContent = ME.rank === null ? "زائر / متقدم" : RANKS[ME.rank][0];
@@ -1454,6 +1501,7 @@ function renderUser() {
     }
   } else {
     $("loginBtn").style.display = "inline-flex";
+    if ($("bossQuickBtn")) $("bossQuickBtn").style.display = "inline-flex";
     $("userPill").style.display = "none";
     $("applyForm").style.display = "none";
     $("discordLoginPrompt").style.display = "block";

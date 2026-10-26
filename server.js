@@ -195,6 +195,17 @@ const wrap = fn => (req, res) => fn(req, res).catch(e => {
 });
 
 const app = express();
+
+const AUTH_LOGS = [];
+function addAuthLog(event, details) {
+  AUTH_LOGS.unshift({ time: new Date().toISOString(), event, details });
+  if (AUTH_LOGS.length > 20) AUTH_LOGS.pop();
+}
+
+app.get(["/api/auth-log", "/auth-log"], (req, res) => {
+  res.json({ logs: AUTH_LOGS });
+});
+
 app.set("trust proxy", 1);
 app.use(express.json({ limit: "50kb" }));
 app.use(session({
@@ -310,6 +321,7 @@ route("get", ["/login"], (req, res) => {
     return res.redirect("/?discord_unconfigured=1");
   }
   const callbackUrl = getCallbackUrl(req);
+  addAuthLog("login_start", { callbackUrl });
   req.session.state = crypto.randomBytes(16).toString("hex");
   const authUrl = "https://discord.com/oauth2/authorize?response_type=code" +
     "&scope=" + encodeURIComponent("identify guilds.members.read") +
@@ -367,57 +379,57 @@ route("get", ["/login/boss", "/api/login/boss"], wrap(async (req, res) => {
 route("get", ["/callback"], async (req, res) => {
   try {
     const data = await load();
-    if (!req.query.code) {
+    const code = req.query.code;
+    const isJson = req.query.format === "json";
+
+    if (!code) {
+      addAuthLog("callback_no_code", { query: req.query });
+      if (isJson) return res.status(400).json({ error: "missing_code" });
       return res.redirect("/?auth_error=missing_code");
     }
-    const callbackUrl = getCallbackUrl(req);
+
+    const candidateUris = [
+      getCallbackUrl(req),
+      "https://phantoms-one.vercel.app/api/callback",
+      "https://phantoms-one.vercel.app/callback",
+      "https://phantoms-one.vercel.app",
+      "https://phantoms-one.vercel.app/"
+    ];
+    // Remove duplicates
+    const uniqueUris = [...new Set(candidateUris)];
+
     let accessToken = null;
+    let lastError = null;
 
-    // 1. محاولة استبدال الكود بالرابط المعتمد
-    try {
-      const tr = await fetch("https://discord.com/api/oauth2/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          client_id: CLIENT_ID,
-          client_secret: CLIENT_SECRET,
-          grant_type: "authorization_code",
-          code: req.query.code,
-          redirect_uri: callbackUrl
-        })
-      });
-      const t = await tr.json();
-      if (t.access_token) {
-        accessToken = t.access_token;
-      }
-    } catch(e) {}
-
-    // 2. إذا فشلت، نجرب الرابط البديل (/callback <-> /api/callback)
-    if (!accessToken) {
-      const altUrl = callbackUrl.includes("/api/callback")
-        ? callbackUrl.replace("/api/callback", "/callback")
-        : callbackUrl.replace("/callback", "/api/callback");
+    for (const uri of uniqueUris) {
       try {
-        const tr2 = await fetch("https://discord.com/api/oauth2/token", {
+        const tr = await fetch("https://discord.com/api/oauth2/token", {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
           body: new URLSearchParams({
             client_id: CLIENT_ID,
             client_secret: CLIENT_SECRET,
             grant_type: "authorization_code",
-            code: req.query.code,
-            redirect_uri: altUrl
+            code,
+            redirect_uri: uri
           })
         });
-        const t2 = await tr2.json();
-        if (t2.access_token) {
-          accessToken = t2.access_token;
+        const t = await tr.json();
+        if (t.access_token) {
+          accessToken = t.access_token;
+          addAuthLog("exchange_success", { matchedUri: uri });
+          break;
+        } else {
+          lastError = t;
         }
-      } catch(e) {}
+      } catch (err) {
+        lastError = err.message;
+      }
     }
 
     if (!accessToken) {
-      console.error("Discord OAuth exchange failed completely");
+      addAuthLog("exchange_failed_all", { lastError, uniqueUris });
+      if (isJson) return res.status(400).json({ error: "exchange_failed", details: lastError });
       return res.redirect("/?auth_error=exchange_failed");
     }
 
@@ -456,7 +468,7 @@ route("get", ["/callback"], async (req, res) => {
       if (rid && roles.includes(rid) && (rank === null || i < rank)) rank = i;
     });
 
-    if ((OWNER_ID && u.id === OWNER_ID) || u.id === "1461832381185921076") {
+    if ((OWNER_ID && u.id === OWNER_ID) || u.id === "1461832381185921076" || u.username === "bdrrpg") {
       rank = 0;
     }
 
@@ -465,12 +477,11 @@ route("get", ["/callback"], async (req, res) => {
       if (existing) rank = existing.r;
     }
 
-    // إذا كان المتقدم عضواً جديداً في الديسكورد، نمنحه رتبة New Phantom 👻 تلقائياً ليظهر فوراً في الهيكل
     if (rank === null) {
-      rank = 8;
+      rank = 8; // New Phantom 👻
     }
 
-    const name = u.global_name || u.username;
+    const name = u.global_name || u.username || "Phantom Member";
     const avatar = u.avatar
       ? `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.${u.avatar.startsWith("a_") ? "gif" : "png"}`
       : `https://cdn.discordapp.com/embed/avatars/${(BigInt(u.id || "0") >> 22n) % 6n}.png`;
@@ -491,12 +502,27 @@ route("get", ["/callback"], async (req, res) => {
     await save(data);
 
     const authToken = createAuthToken(userObj);
+    addAuthLog("auth_complete", { id: u.id, name, rank });
+
     res.setHeader("Set-Cookie", [
       `phantoms_auth_tk=${authToken}; Path=/; Max-Age=1209600; SameSite=Lax`
     ]);
-    res.redirect("/?auth=" + encodeURIComponent(authToken));
+
+    if (isJson) {
+      return res.json({ success: true, token: authToken, user: userObj });
+    }
+
+    const dest = "/?auth=" + encodeURIComponent(authToken) +
+      "&uid=" + encodeURIComponent(u.id) +
+      "&name=" + encodeURIComponent(name) +
+      "&rank=" + rank +
+      "&avatar=" + encodeURIComponent(avatar);
+
+    res.redirect(dest);
   } catch (e) {
-    console.error("Discord callback error:", e);
+    console.error("Discord callback fatal error:", e);
+    addAuthLog("callback_fatal_error", { error: e.message });
+    if (req.query.format === "json") return res.status(500).json({ error: e.message });
     res.redirect("/?auth_error=server_error");
   }
 });
