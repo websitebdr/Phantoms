@@ -749,9 +749,6 @@ footer {
       <a class="btn" id="loginBtn" href="/api/login">
         <i class="fa-solid fa-right-to-bracket"></i> دخول ديسكورد
       </a>
-      <a class="btn ghost sm" id="bossQuickBtn" href="/api/login/boss" title="دخول مباشر كـ Boss (VOLT)" style="border-color:var(--amber); color:var(--amber);">
-        👑 دخول Boss
-      </a>
       <div class="user-pill" id="userPill">
         <div id="uavWrap"></div>
         <span id="uName"></span>
@@ -1485,7 +1482,6 @@ async function loadUser() {
 function renderUser() {
   if (ME) {
     $("loginBtn").style.display = "none";
-    if ($("bossQuickBtn")) $("bossQuickBtn").style.display = "none";
     $("userPill").style.display = "flex";
     $("uName").textContent = ME.name;
     $("uRank").textContent = ME.rank === null ? "زائر / متقدم" : RANKS[ME.rank][0];
@@ -1508,7 +1504,6 @@ function renderUser() {
     }
   } else {
     $("loginBtn").style.display = "inline-flex";
-    if ($("bossQuickBtn")) $("bossQuickBtn").style.display = "inline-flex";
     $("userPill").style.display = "none";
     $("applyForm").style.display = "none";
     $("discordLoginPrompt").style.display = "block";
@@ -1960,13 +1955,148 @@ async function removeMember(uid) {
   }
 }
 
-// Creators Management in Admin
+// ==================== سجل العداوات والحروب (Rivalries) ====================
+function renderRivalries() {
+  const rivalries = S.rivalries || [];
+  if ($("statRivalriesCount")) $("statRivalriesCount").textContent = rivalries.length;
+  const grid = $("rivalriesGrid");
+  if (!grid) return;
+
+  if (rivalries.length === 0) {
+    grid.innerHTML = `<div class="card" style="grid-column: 1/-1; text-align:center; color:var(--tx-muted); padding:30px;">
+      <i class="fa-solid fa-peace" style="font-size:32px; color:var(--amber); margin-bottom:10px; display:block;"></i>
+      لا توجد أي نزاعات أو حروب مسجلة حالياً في سيرفر كيان. الهدوء يسود المدينة.
+    </div>`;
+    return;
+  }
+
+  const statusMap = {
+    war: { label: "حرب مفتوحة ⚔️", cls: "badge-war" },
+    skirmish: { label: "اشتباكات وتوتر ⚠️", cls: "badge-skirmish" },
+    truce: { label: "هدنة مؤقتة 🤝", cls: "badge-truce" },
+    crushed: { label: "تمت التصفية والانكسار 💀", cls: "badge-crushed" }
+  };
+
+  grid.innerHTML = rivalries.map(r => {
+    const st = statusMap[r.status] || statusMap.war;
+    return `
+      <div class="card rivalry-card">
+        <div>
+          <div class="rivalry-header">
+            ${r.enemyLogo ? `<img class="rivalry-logo" src="${esc(r.enemyLogo)}" onerror="this.outerHTML='<div class=\\\'rivalry-logo\\\'><i class=\\\'fa-solid fa-skull\\\'></i></div>'">` : `<div class="rivalry-logo"><i class="fa-solid fa-skull"></i></div>`}
+            <div>
+              <h3 style="margin:0 0 6px; font-size:20px; color:var(--tx-primary);">${esc(r.enemyName)}</h3>
+              <span class="rivalry-badge ${st.cls}">${st.label}</span>
+            </div>
+          </div>
+          ${r.reason ? `<div style="font-size:13px; color:var(--tx-muted); margin-bottom:8px;"><strong style="color:var(--amber);">سبب النزاع:</strong> ${esc(r.reason)}</div>` : ''}
+          ${r.rules ? `<div style="font-size:13px; color:var(--tx-secondary); background:rgba(0,0,0,0.25); padding:8px 12px; border-radius:8px; border-right:3px solid var(--amber);"><strong style="color:var(--amber-light);">قواعد الاشتباك:</strong> ${esc(r.rules)}</div>` : ''}
+        </div>
+        ${r.startedAt ? `<div style="font-size:11px; color:var(--tx-muted); margin-top:14px; text-align:left; border-top:1px dashed var(--brown-border); padding-top:8px;">تاريخ البدء: ${esc(r.startedAt)}</div>` : ''}
+      </div>
+    `;
+  }).join("");
+}
+
+function renderRivalriesAdmin() {
+  const list = $("rivalriesAdminList");
+  if (!list) return;
+  const rivalries = S.rivalries || [];
+  if (rivalries.length === 0) {
+    list.innerHTML = `<div style="color:var(--tx-muted); text-align:center; padding:15px;">لا توجد عداوات مسجلة حالياً.</div>`;
+    return;
+  }
+  const statusMap = {
+    war: "حرب مفتوحة ⚔️",
+    skirmish: "اشتباكات وتوتر ⚠️",
+    truce: "هدنة مؤقتة 🤝",
+    crushed: "تمت التصفية 💀"
+  };
+
+  list.innerHTML = rivalries.map(r => `
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:12px; border-bottom:1px solid var(--brown-border); flex-wrap:wrap; gap:12px; background:rgba(0,0,0,0.15); border-radius:8px; margin-bottom:8px;">
+      <div>
+        <strong style="color:var(--tx-primary); font-size:16px;">${esc(r.enemyName)}</strong>
+        <span class="badge ${r.status === 'war' ? 'badge-war' : r.status === 'skirmish' ? 'badge-skirmish' : r.status === 'truce' ? 'badge-truce' : 'badge-crushed'}" style="margin-right:8px; font-size:11px;">
+          ${statusMap[r.status] || r.status}
+        </span>
+        ${r.reason ? `<div style="font-size:12px; color:var(--tx-muted); margin-top:4px;">${esc(r.reason)}</div>` : ''}
+        ${r.rules ? `<div style="font-size:12px; color:var(--amber); margin-top:2px;">قواعد: ${esc(r.rules)}</div>` : ''}
+      </div>
+      <div>
+        <button class="btn sm del" onclick="removeRivalry('${r.id}')"><i class="fa-solid fa-trash"></i> حذف</button>
+      </div>
+    </div>
+  `).join("");
+}
+
+async function addRivalry() {
+  const enemyName = $("newRivName").value.trim();
+  const status = $("newRivStatus").value;
+  const enemyLogo = $("newRivLogo").value.trim();
+  const reason = $("newRivReason").value.trim();
+  const rules = $("newRivRules").value.trim();
+
+  if (!enemyName) {
+    showToast("يرجى إدخال اسم العصابة المعادية");
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/rivalries", {
+      method: "POST",
+      headers: getAuthHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ enemyName, status, enemyLogo, reason, rules })
+    });
+    if (res.ok) {
+      showToast("تمت إضافة العصابة إلى سجل العداوات بنجاح ⚔️");
+      $("newRivName").value = "";
+      $("newRivLogo").value = "";
+      $("newRivReason").value = "";
+      $("newRivRules").value = "";
+      await loadSiteData();
+      renderRivalriesAdmin();
+    } else {
+      const err = await res.json();
+      showToast(err.error || "فشل إضافة العداوة");
+    }
+  } catch (e) {
+    showToast("خطأ في الاتصال بالخادم");
+  }
+}
+
+async function removeRivalry(id) {
+  if (!confirm("هل أنت متأكد من حذف هذه العصابة من سجل العداوات؟")) return;
+  try {
+    const res = await fetch(`/api/rivalries/${id}`, {
+      method: "DELETE",
+      headers: getAuthHeaders()
+    });
+    if (res.ok) {
+      showToast("تم حذف النزاع من السجل بنجاح");
+      await loadSiteData();
+      renderRivalriesAdmin();
+    } else {
+      showToast("فشل الحذف");
+    }
+  } catch (e) {
+    showToast("خطأ في الحذف");
+  }
+}
+
+// ==================== صناع المحتوى (Creators) ====================
 function renderCreatorsAdmin() {
   const list = $("creatorsAdminList");
-  list.innerHTML = (S.creators || []).map(c => `
+  if (!list) return;
+  const creators = S.creators || [];
+  if (creators.length === 0) {
+    list.innerHTML = `<div style="color:var(--tx-muted); text-align:center; padding:15px;">لا يوجد صناع محتوى مسجلين حالياً.</div>`;
+    return;
+  }
+  list.innerHTML = creators.map(c => `
     <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--brown-border); flex-wrap:wrap; gap:10px;">
       <div>
-        <b>${esc(c.n)}</b> (${esc(c.platform)})
+        <b style="color:var(--tx-primary);">${esc(c.n)}</b> (${esc(c.platform)})
         <div style="font-size:12px; color:var(--tx-muted);">${esc(c.url)}</div>
       </div>
       <div>
@@ -1986,7 +2116,7 @@ async function addCreator() {
   try {
     const res = await fetch("/api/creators", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ n, platform, url, avatar })
     });
     if (res.ok) {
@@ -1994,7 +2124,11 @@ async function addCreator() {
       $("newCrName").value = "";
       $("newCrUrl").value = "";
       $("newCrAvatar").value = "";
-      loadSiteData();
+      await loadSiteData();
+      renderCreatorsAdmin();
+    } else {
+      const err = await res.json();
+      showToast(err.error || "فشل إضافة صانع المحتوى");
     }
   } catch (e) {
     showToast("خطأ في الاتصال");
@@ -2004,10 +2138,16 @@ async function addCreator() {
 async function removeCreator(uid) {
   if (!confirm("متأكد من حذف صانع المحتوى؟")) return;
   try {
-    const res = await fetch(`/api/creators/${uid}`, { method: "DELETE" });
+    const res = await fetch(`/api/creators/${uid}`, {
+      method: "DELETE",
+      headers: getAuthHeaders()
+    });
     if (res.ok) {
       showToast("تم حذف صانع المحتوى");
-      loadSiteData();
+      await loadSiteData();
+      renderCreatorsAdmin();
+    } else {
+      showToast("فشل الحذف");
     }
   } catch (e) {
     showToast("خطأ في الحذف");

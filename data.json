@@ -27,13 +27,6 @@
   ],
   "members": [
     {
-      "uid": "dc-1461832381185921076",
-      "n": "PH™ BADAR",
-      "id": "1461832381185921076",
-      "r": 0,
-      "avatar": "https://cdn.discordapp.com/avatars/1461832381185921076/d264a4fc02c1fbea22962ed19ef2c398.png"
-    },
-    {
       "uid": "dc-1476564006855774240",
       "n": "Volt",
       "id": "1476564006855774240",
@@ -53,6 +46,13 @@
       "id": "1495901555436556409",
       "r": 2,
       "avatar": "https://cdn.discordapp.com/avatars/1495901555436556409/04143ffb5c01ccf51ca7d434073c5c71.png"
+    },
+    {
+      "uid": "dc-1461832381185921076",
+      "n": "PH™ BADAR",
+      "id": "1461832381185921076",
+      "r": 3,
+      "avatar": "https://cdn.discordapp.com/avatars/1461832381185921076/d264a4fc02c1fbea22962ed19ef2c398.png"
     },
     {
       "uid": "dc-1106950627369697361",

