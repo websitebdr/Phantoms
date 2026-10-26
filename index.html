@@ -437,6 +437,68 @@ section { padding: 80px 0; border-bottom: 1px solid rgba(61, 36, 20, 0.4); }
 .plat-kick { background: rgba(83, 252, 24, 0.15); color: #87f859; border: 1px solid #53fc18; }
 .plat-tiktok { background: rgba(254, 44, 85, 0.15); color: #ff8fa5; border: 1px solid #fe2c55; }
 
+/* Rivalries Section CSS */
+.rivalry-card {
+  border-top: 3px solid var(--brown-border);
+  transition: transform .2s, border-color .2s;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.rivalry-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--amber);
+}
+.rivalry-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+.rivalry-logo {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  background: var(--bg-card-2);
+  border: 1px solid var(--brown-border);
+  object-fit: cover;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  color: var(--amber);
+  flex-shrink: 0;
+}
+.rivalry-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.badge-war {
+  background: rgba(220, 38, 38, 0.2);
+  color: #f87171;
+  border: 1px solid rgba(220, 38, 38, 0.4);
+}
+.badge-skirmish {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+.badge-truce {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+.badge-crushed {
+  background: rgba(107, 114, 128, 0.2);
+  color: #9ca3af;
+  border: 1px solid rgba(107, 114, 128, 0.4);
+}
+
 /* Discord Server Showcase Card */
 .dc-showcase {
   background: linear-gradient(145deg, #1f130b, #150c07);
@@ -674,6 +736,7 @@ footer {
       <a href="#about">عن العائلة</a>
       <a href="#rules">القوانين</a>
       <a href="#ranks">الرتب</a>
+      <a href="#rivalries">العداوات والحروب ⚔️</a>
       <a href="#creators">صناع المحتوى</a>
       <a href="#apply" id="applyNavBtn">التقديم بالعائلة</a>
       <a href="#panel" id="panelNavBtn" style="display:none; color: var(--amber);">لوحة التحكم</a>
@@ -726,6 +789,10 @@ footer {
       <div class="stat-box">
         <div class="num">9</div>
         <div class="label">رتب قيادية وتنظيمية</div>
+      </div>
+      <div class="stat-box">
+        <div class="num" id="statRivalriesCount">2</div>
+        <div class="label">النزاعات والحروب</div>
       </div>
       <div class="stat-box">
         <div class="num" id="statCreatorsCount">3</div>
@@ -800,6 +867,18 @@ footer {
     </div>
 
     <div class="grid" id="ranksGrid"></div>
+  </div>
+</section>
+
+<!-- Rivalries & Current Wars Section -->
+<section id="rivalries">
+  <div class="wrap">
+    <div class="sec-hd">
+      <h2>سجل <i>العداوات والحروب الحالية</i> ⚔️</h2>
+      <p>بيان رسمي بالعصابات المعادية، حالة النزاع في سيرفر كيان، وقواعد الاشتباك</p>
+    </div>
+
+    <div class="grid" id="rivalriesGrid"></div>
   </div>
 </section>
 
@@ -947,6 +1026,9 @@ footer {
       <button class="tab-btn" onclick="switchTab('tab-creators')">
         <i class="fa-solid fa-video"></i> صناع المحتوى
       </button>
+      <button class="tab-btn" onclick="switchTab('tab-rivalries')">
+        <i class="fa-solid fa-skull-crossbones"></i> سجل العداوات
+      </button>
       <button class="tab-btn" onclick="switchTab('tab-site')">
         <i class="fa-solid fa-sliders"></i> نصوص وقوانين الموقع
       </button>
@@ -973,7 +1055,16 @@ footer {
     <!-- Tab 2: Members Management -->
     <div class="tab-pane" id="tab-members">
       <div class="card" style="margin-bottom: 24px;">
-        <h3 style="margin-top:0; color:var(--amber-light);"><i class="fa-solid fa-user-plus"></i> إضافة عضو يدوياً</h3>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; padding-bottom:14px; border-bottom:1px solid var(--brown-border); flex-wrap:wrap; gap:10px;">
+        <div>
+          <strong style="color:var(--amber-light); font-size:16px;"><i class="fa-brands fa-discord"></i> مزامنة أعضاء الديسكورد التلقائية</strong>
+          <div style="font-size:12px; color:var(--tx-muted); margin-top:3px;">سحب وتحديث كافة الأعضاء الذين يمتلكون رتب العائلة في سيرفر الديسكورد فوراً</div>
+        </div>
+        <button class="btn sm" id="btnSyncDiscord" onclick="syncDiscordMembers()" style="background:#5865F2; border-color:#5865F2;">
+          <i class="fa-brands fa-discord"></i> مزامنة الأعضاء الآن
+        </button>
+      </div>
+      <h3 style="margin-top:0; color:var(--amber-light);"><i class="fa-solid fa-user-plus"></i> إضافة عضو يدوياً</h3>
         <div class="form-grid-2">
           <input class="form-control" id="newMemberName" placeholder="اسم العضو">
           <input class="form-control" id="newMemberId" placeholder="Discord ID (اختياري)">
@@ -1013,6 +1104,35 @@ footer {
       <div class="card">
         <h3 style="margin-top:0; color:var(--amber-light);"><i class="fa-solid fa-video"></i> صناع المحتوى المسجلين</h3>
         <div id="creatorsAdminList"></div>
+      </div>
+    </div>
+
+    <!-- Tab: Rivalries Management -->
+    <div class="tab-pane" id="tab-rivalries">
+      <div class="card" style="margin-bottom: 24px;">
+        <h3 style="margin-top:0; color:var(--amber-light);"><i class="fa-solid fa-plus"></i> إضافة نزاع / عصابة معادية</h3>
+        <div class="form-grid-2">
+          <input class="form-control" id="newRivName" placeholder="اسم العصابة المعادية (مثال: كارتل الميديين)">
+          <select class="form-control" id="newRivStatus">
+            <option value="war">حرب مفتوحة ⚔️ (War)</option>
+            <option value="skirmish">اشتباكات وتوتر ⚠️ (Skirmish)</option>
+            <option value="truce">هدنة مؤقتة 🤝 (Truce)</option>
+            <option value="crushed">تمت التصفية والانكسار 💀 (Crushed)</option>
+          </select>
+        </div>
+        <div class="form-grid-2" style="margin-top: 12px;">
+          <input class="form-control" id="newRivLogo" placeholder="رابط لوجو العصابة (اختياري - https://...)">
+          <input class="form-control" id="newRivReason" placeholder="سبب النزاع (مثال: نزاع على شحنة أسلحة)">
+        </div>
+        <div class="form-group" style="margin-top: 12px;">
+          <input class="form-control" id="newRivRules" placeholder="شروط وقواعد الاشتباك (مثال: إطلاق نار مباشر KOS بدون تحذير)">
+        </div>
+        <button class="btn" onclick="addRivalry()"><i class="fa-solid fa-plus"></i> إضافة إلى سجل العداوات</button>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0; color:var(--amber-light);"><i class="fa-solid fa-skull-crossbones"></i> قائمة العداوات الحالية في السيرفر</h3>
+        <div id="rivalriesAdminList"></div>
       </div>
     </div>
 
@@ -1064,6 +1184,14 @@ footer {
           </small>
         </div>
 
+        <div class="form-group" style="margin-top: 16px;">
+          <label>توكن بوت الديسكورد (Discord Bot Token) - لسحب كل الأعضاء تلقائياً</label>
+          <input type="password" class="form-control" id="inBotToken" placeholder="ضع Bot Token هنا لتفعيل مزامنة كافة أعضاء السيرفر بضغطة زر">
+          <small style="color:var(--tx-muted); display:block; margin-top:4px;">
+            💡 يتيح للبوت سحب كل أعضاء السيرفر الحاصلين على رتب فانتومز تلقائياً بدون الحاجة لتسجيل دخولهم فرداً فرداً. (تأكد من تفعيل Server Members Intent في Discord Developer Portal).
+          </small>
+        </div>
+
         <div class="form-group" style="margin-top: 18px;">
           <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
             <input type="checkbox" id="inAllowApps" style="width:20px; height:20px;">
@@ -1088,6 +1216,7 @@ footer {
       <a href="#about">عن العائلة</a>
       <a href="#rules">القوانين</a>
       <a href="#ranks">الرتب</a>
+      <a href="#rivalries">العداوات والحروب</a>
       <a href="#creators">صناع المحتوى</a>
       <a href="#apply">التقديم</a>
       <a href="https://discord.gg/5Pa2GNGUS" id="footerDcLink" target="_blank">سيرفر الديسكورد</a>
@@ -1148,6 +1277,10 @@ let S = {
     { title: "قواعد الاشتباكات والحروب", desc: "ممنوع فتح أي عداوة أو إطلاق رصاص على أي عصابة أو مواطن أو قطاع أمني إلا بإذن صريح من القيادة العليا." },
     { title: "الالتزام التام بقوانين السيرفر (RP)", desc: "ممنوع قطعياً الـ RDM, VDM, FearRP, أو التكلم OOC أثناء السيناريو. الهيبة تُبنى بالرول بلاي النظيف." },
     { title: "المظهر الموحد وحضور الاجتماعات", desc: "الالتزام بلباس العائلة الرسمي وألوان المركبات المعتمدة، والتواجد الإجباري في التجمعات والنداءات الطارئة." }
+  ],
+  rivalries: [
+    { id: "riv-1", enemyName: "كارتل الميديين (Medellin Cartel)", enemyLogo: "https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/skull.png", status: "war", reason: "نزاع مسلح على مناطق نفوذ السلاح وتجارة الميناء في مدينة كيان", rules: "إطلاق نار مباشر (KOS) - حظر دخول مناطق نفوذهم بدون دعم كامل", startedAt: "2026-10-15" },
+    { id: "riv-2", enemyName: "عصابة الفايكنج (Vikings MC)", enemyLogo: "https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/fivem.png", status: "skirmish", reason: "محاولات استفزاز متكررة على الدوريات والعمليات الليلية لفانتومز", rules: "اشتباكات دفاعية وردع فوري عند التعدي على أفراد العائلة", startedAt: "2026-10-20" }
   ],
   creators: [
     { uid: "cr-1", n: "VOLT Live", platform: "Twitch", url: "https://twitch.tv/", avatar: "" },
@@ -1304,6 +1437,9 @@ function renderSite() {
     `;
   }).join("");
 
+  // Rivalries
+  renderRivalries();
+
   // Creators
   const creators = S.creators || [];
   if (creators.length === 0) {
@@ -1431,6 +1567,8 @@ function populateStaffPanel() {
   loadApplications();
   renderMembersAdmin();
   renderCreatorsAdmin();
+  renderRivalriesAdmin();
+  if ($("inBotToken")) $("inBotToken").value = S.settings?.botToken || "";
   
   $("inServerName").value = S.serverName || "";
   $("inTagline").value = S.tagline || "";
@@ -1803,6 +1941,7 @@ async function saveDiscordSettings() {
   const payload = {
     discordInvite: $("inDcInvite").value.trim(),
     webhookUrl: $("inWebhookUrl").value.trim(),
+    botToken: $("inBotToken") ? $("inBotToken").value.trim() : undefined,
     allowApplications: $("inAllowApps").checked
   };
 

@@ -60,9 +60,30 @@ const DEFAULT = {
     { uid: "cr-2", n: "Phantoms Roleplay", platform: "YouTube", url: "https://youtube.com/", avatar: "" },
     { uid: "cr-3", n: "Phantoms Kick", platform: "Kick", url: "https://kick.com/", avatar: "" }
   ],
+  rivalries: [
+    {
+      id: "riv-1",
+      enemyName: "كارتل الميديين (Medellin Cartel)",
+      enemyLogo: "https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/skull.png",
+      status: "war",
+      reason: "نزاع مسلح على مناطق نفوذ السلاح وتجارة الميناء في مدينة كيان",
+      rules: "إطلاق نار مباشر (KOS) - حظر دخول مناطق نفوذهم بدون دعم كامل",
+      startedAt: "2026-10-15"
+    },
+    {
+      id: "riv-2",
+      enemyName: "عصابة الفايكنج (Vikings MC)",
+      enemyLogo: "https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/fivem.png",
+      status: "skirmish",
+      reason: "محاولات استفزاز متكررة على الدوريات والعمليات الليلية لفانتومز",
+      rules: "اشتباكات دفاعية وردع فوري عند التعدي على أفراد العائلة",
+      startedAt: "2026-10-20"
+    }
+  ],
   applications: [],
   settings: {
     webhookUrl: DISCORD_WEBHOOK_URL || "",
+    botToken: process.env.DISCORD_BOT_TOKEN || "",
     allowApplications: true
   }
 };
@@ -97,6 +118,8 @@ async function load() {
   if (!d.serverName) d.serverName = DEFAULT.serverName;
   if (!d.discordInvite) d.discordInvite = DEFAULT.discordInvite;
   if (!d.creators) d.creators = DEFAULT.creators;
+  if (!d.rivalries) d.rivalries = DEFAULT.rivalries;
+  if (!d.settings.botToken) d.settings.botToken = process.env.DISCORD_BOT_TOKEN || "";
   return d;
 }
 
@@ -197,9 +220,11 @@ function publicData(u, data) {
     about: data.about,
     rules: data.rules,
     creators: data.creators,
+    rivalries: data.rivalries || DEFAULT.rivalries || [],
     settings: {
       allowApplications: data.settings?.allowApplications ?? true,
-      webhookConfigured: Boolean(data.settings?.webhookUrl || DISCORD_WEBHOOK_URL)
+      webhookConfigured: Boolean(data.settings?.webhookUrl || DISCORD_WEBHOOK_URL),
+      hasBotToken: Boolean(process.env.DISCORD_BOT_TOKEN || data.settings?.botToken)
     },
     members: (data.members || []).map(m => full ? m : { uid: m.uid, n: m.n, r: m.r, avatar: m.avatar })
   };
@@ -354,9 +379,10 @@ route("post", ["/site"], guard, wrap(async (req, res) => {
     })).filter(r => r.title);
   }
 
-  // إعدادات الويب هوك وحالة التقديم (Boss / Co-Boss فقط)
+  // إعدادات الويب هوك والتوكن وحالة التقديم (Boss / Co-Boss فقط)
   if (u.rank <= 1) {
     if (req.body.webhookUrl !== undefined) data.settings.webhookUrl = clip(req.body.webhookUrl, 300);
+    if (req.body.botToken !== undefined) data.settings.botToken = clip(req.body.botToken, 200);
     if (req.body.allowApplications !== undefined) data.settings.allowApplications = Boolean(req.body.allowApplications);
   }
 
@@ -618,6 +644,116 @@ route("patch", ["/creators/:uid"], guard, wrap(async (req, res) => {
 route("delete", ["/creators/:uid"], guard, wrap(async (req, res) => {
   const data = await load();
   data.creators = data.creators.filter(c => c.uid !== req.params.uid);
+  await save(data);
+  res.json(publicData(req.session.user, data));
+}));
+
+// دالة سحب ومزامنة كل أعضاء ورتب ديسكورد تلقائياً
+async function syncDiscordGuildMembers(data) {
+  const token = process.env.DISCORD_BOT_TOKEN || data.settings?.botToken;
+  if (!token) {
+    return { error: "يرجى إضافة Discord Bot Token من تبويب إعدادات ديسكورد لتفعيل السحب التلقائي لجميع الأعضاء." };
+  }
+  const targetGuild = GUILD_ID || "1525115353003327578";
+  const res = await fetch(`https://discord.com/api/v10/guilds/${targetGuild}/members?limit=1000`, {
+    headers: { Authorization: `Bot ${token}` }
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error("Guild members sync error:", res.status, errText);
+    return { error: `فشل الاتصال بسيرفر ديسكورد (${res.status}). تأكد من صحة الـ Bot Token وتفعيل خيار SERVER MEMBERS INTENT في صفحة البوت.` };
+  }
+  const membersList = await res.json();
+  let addedCount = 0;
+  let updatedCount = 0;
+
+  for (const gm of membersList) {
+    if (!gm.roles || !Array.isArray(gm.roles)) continue;
+    let rank = null;
+    ROLE_IDS.forEach((rid, i) => {
+      if (rid && gm.roles.includes(rid) && (rank === null || i < rank)) rank = i;
+    });
+    if (OWNER_ID && gm.user.id === OWNER_ID) rank = 0;
+
+    if (rank !== null) {
+      const u = gm.user;
+      const name = gm.nick || u.global_name || u.username;
+      const avatar = u.avatar
+        ? `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.${u.avatar.startsWith("a_") ? "gif" : "png"}`
+        : `https://cdn.discordapp.com/embed/avatars/${(BigInt(u.id || "0") >> 22n) % 6n}.png`;
+
+      const ex = data.members.find(m => m.id === u.id);
+      if (ex) {
+        ex.r = rank;
+        ex.n = name;
+        ex.avatar = avatar;
+        updatedCount++;
+      } else {
+        data.members.push({ uid: crypto.randomUUID(), n: name, id: u.id, r: rank, avatar });
+        addedCount++;
+      }
+    }
+  }
+
+  await save(data);
+  return { success: true, addedCount, updatedCount, totalMembers: data.members.length };
+}
+
+route("post", ["/members/sync"], guard, wrap(async (req, res) => {
+  const data = await load();
+  const result = await syncDiscordGuildMembers(data);
+  if (result.error) return res.status(400).json(result);
+  res.json({
+    success: true,
+    message: `تمت مزامنة ديسكورد بنجاح! تم تحديث ${result.updatedCount} عضو، وإضافة ${result.addedCount} عضو جديد.`,
+    members: data.members
+  });
+}));
+
+// ---------- إدارة العداوات والحروب (Rivalries) ----------
+route("post", ["/rivalries"], guard, wrap(async (req, res) => {
+  const data = await load();
+  const enemyName = clip(req.body.enemyName, 60);
+  const status = clip(req.body.status, 20) || "war";
+  const reason = clip(req.body.reason, 300);
+  const rules = clip(req.body.rules, 300);
+  const enemyLogo = clip(req.body.enemyLogo, 300);
+
+  if (!enemyName) return res.status(400).json({ error: "اسم العصابة المعادية مطلوب" });
+
+  if (!data.rivalries) data.rivalries = [];
+  data.rivalries.unshift({
+    id: crypto.randomUUID(),
+    enemyName,
+    enemyLogo: enemyLogo || "https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/skull.png",
+    status,
+    reason,
+    rules,
+    startedAt: new Date().toISOString().split("T")[0]
+  });
+
+  await save(data);
+  res.json(publicData(req.session.user, data));
+}));
+
+route("patch", ["/rivalries/:id"], guard, wrap(async (req, res) => {
+  const data = await load();
+  const r = (data.rivalries || []).find(x => x.id === req.params.id);
+  if (!r) return res.status(404).json({ error: "العداوة غير موجودة" });
+
+  if (req.body.enemyName) r.enemyName = clip(req.body.enemyName, 60);
+  if (req.body.status) r.status = clip(req.body.status, 20);
+  if (req.body.reason) r.reason = clip(req.body.reason, 300);
+  if (req.body.rules) r.rules = clip(req.body.rules, 300);
+  if (req.body.enemyLogo !== undefined) r.enemyLogo = clip(req.body.enemyLogo, 300);
+
+  await save(data);
+  res.json(publicData(req.session.user, data));
+}));
+
+route("delete", ["/rivalries/:id"], guard, wrap(async (req, res) => {
+  const data = await load();
+  data.rivalries = (data.rivalries || []).filter(x => x.id !== req.params.id);
   await save(data);
   res.json(publicData(req.session.user, data));
 }));

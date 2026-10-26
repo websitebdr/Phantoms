@@ -82,7 +82,28 @@
   ],
   "settings": {
     "webhookUrl": "",
-    "allowApplications": true
+    "allowApplications": true,
+    "botToken": ""
   },
-  "guildId": "1525115353003327578"
+  "guildId": "1525115353003327578",
+  "rivalries": [
+    {
+      "id": "riv-1",
+      "enemyName": "كارتل الميديين (Medellin Cartel)",
+      "enemyLogo": "https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/skull.png",
+      "status": "war",
+      "reason": "نزاع مسلح على مناطق نفوذ السلاح وتجارة الميناء في مدينة كيان",
+      "rules": "إطلاق نار مباشر (KOS) - حظر دخول مناطق نفوذهم بدون دعم كامل",
+      "startedAt": "2026-10-15"
+    },
+    {
+      "id": "riv-2",
+      "enemyName": "عصابة الفايكنج (Vikings MC)",
+      "enemyLogo": "https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/fivem.png",
+      "status": "skirmish",
+      "reason": "محاولات استفزاز متكررة على الدوريات والعمليات الليلية لفانتومز",
+      "rules": "اشتباكات دفاعية وردع فوري عند التعدي على أفراد العائلة",
+      "startedAt": "2026-10-20"
+    }
+  ]
 }
