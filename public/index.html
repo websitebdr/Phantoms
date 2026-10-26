@@ -1267,15 +1267,45 @@ const RANKS = [
 ];
 
 
-// استخراج وحفظ توكن تسجيل الدخول من الرابط في LocalStorage و Cookie
+// استخراج وحفظ توكن تسجيل الدخول مع فك البيانات فورياً بدون انتظار
 (function initAuth() {
   try {
     const p = new URLSearchParams(window.location.search);
     const a = p.get("auth");
+    const err = p.get("auth_error");
+
+    if (err) {
+      setTimeout(() => {
+        showToast("تنبيه ديسكورد: " + (err === "exchange_failed" ? "فشل التحقق من كود الديسكورد، يرجى المحاولة مرة أخرى." : err));
+      }, 500);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
     if (a) {
       try { localStorage.setItem("phantoms_auth", a); } catch(e) {}
       document.cookie = "phantoms_auth_tk=" + encodeURIComponent(a) + "; path=/; max-age=1209600; SameSite=Lax";
+      
+      // فك التوكن واستخراج بيانات المستخدم فورياً (0 ملي ثانية)
+      try {
+        const parts = a.split(".");
+        if (parts.length === 2) {
+          const b64 = parts[0].replace(/-/g, "+").replace(/_/g, "/");
+          const userObj = JSON.parse(decodeURIComponent(escape(atob(b64))));
+          if (userObj && userObj.id) {
+            ME = userObj;
+            try { localStorage.setItem("phantoms_user", JSON.stringify(userObj)); } catch(e) {}
+          }
+        }
+      } catch(e) {
+        console.warn("Token payload decode:", e);
+      }
       window.history.replaceState({}, document.title, window.location.pathname);
+    } else {
+      // استرجاع المستخدم المحفوظ مسبقاً من الذاكرة لعدم حدوث وميض
+      try {
+        const cached = localStorage.getItem("phantoms_user");
+        if (cached) ME = JSON.parse(cached);
+      } catch(e) {}
     }
   } catch(e) {
     console.warn("Auth init error:", e);
@@ -1299,7 +1329,10 @@ function getAuthHeaders(extra = {}) {
 }
 
 function logoutUser() {
-  try { localStorage.removeItem("phantoms_auth"); } catch(e) {}
+  try {
+    localStorage.removeItem("phantoms_auth");
+    localStorage.removeItem("phantoms_user");
+  } catch(e) {}
   document.cookie = "phantoms_auth_tk=; path=/; max-age=0";
   window.location.href = "/api/logout";
 }
@@ -1378,11 +1411,16 @@ async function loadUser() {
   try {
     const res = await fetch("/api/me", { headers: getAuthHeaders() });
     if (res.ok) {
-      ME = await res.json();
-      renderUser();
-      if (ME) {
-        // تحديث محتوى ورتب الموقع بعد التعرف على المستخدم
+      const u = await res.json();
+      if (u && u.id) {
+        ME = u;
+        try { localStorage.setItem("phantoms_user", JSON.stringify(u)); } catch(e) {}
+        renderUser();
         loadSiteData();
+      } else if (!getAuthToken()) {
+        ME = null;
+        try { localStorage.removeItem("phantoms_user"); } catch(e) {}
+        renderUser();
       }
     }
   } catch (e) {
@@ -2034,6 +2072,7 @@ async function testWebhook() {
 
 // Initial Boot
 (async () => {
+  if (ME) renderUser();
   renderSite();
   await loadSiteData();
   await loadUser();

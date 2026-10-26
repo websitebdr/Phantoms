@@ -98,22 +98,27 @@ const redis = async cmd => {
   return (await r.json()).result;
 };
 
+let MEMORY_DATA = null;
+
 async function load() {
+  if (MEMORY_DATA) return MEMORY_DATA;
   let d = null;
   if (RURL && RTOK) {
-    const v = await redis(["GET", "phantoms_data"]);
-    d = v ? JSON.parse(v) : null;
-  } else if (fs.existsSync(DB)) {
     try {
-      d = JSON.parse(fs.readFileSync(DB, "utf8"));
-    } catch (e) {
-      console.error("Failed to parse data.json:", e);
-    }
+      const v = await redis(["GET", "phantoms_data"]);
+      d = v ? JSON.parse(v) : null;
+    } catch (e) {}
   }
   if (!d) {
-    d = JSON.parse(JSON.stringify(DEFAULT));
-    await save(d);
+    try {
+      if (fs.existsSync("/tmp/data.json")) {
+        d = JSON.parse(fs.readFileSync("/tmp/data.json", "utf8"));
+      } else if (fs.existsSync(DB)) {
+        d = JSON.parse(fs.readFileSync(DB, "utf8"));
+      }
+    } catch (e) {}
   }
+  if (!d) d = JSON.parse(JSON.stringify(DEFAULT));
   if (!d.rules) d.rules = DEFAULT.rules;
   if (!d.applications) d.applications = [];
   if (!d.settings) d.settings = DEFAULT.settings;
@@ -121,15 +126,23 @@ async function load() {
   if (!d.discordInvite) d.discordInvite = DEFAULT.discordInvite;
   if (!d.creators) d.creators = DEFAULT.creators;
   if (!d.rivalries) d.rivalries = DEFAULT.rivalries;
-  if (!d.settings.botToken) d.settings.botToken = process.env.DISCORD_BOT_TOKEN || "";
+  MEMORY_DATA = d;
   return d;
 }
 
 async function save(d) {
+  MEMORY_DATA = d;
   if (RURL && RTOK) {
-    await redis(["SET", "phantoms_data", JSON.stringify(d)]);
+    try {
+      await redis(["SET", "phantoms_data", JSON.stringify(d)]);
+    } catch (e) {}
   } else {
-    fs.writeFileSync(DB, JSON.stringify(d, null, 2), "utf8");
+    try {
+      fs.writeFileSync("/tmp/data.json", JSON.stringify(d, null, 2), "utf8");
+    } catch (e) {}
+    try {
+      fs.writeFileSync(DB, JSON.stringify(d, null, 2), "utf8");
+    } catch (e) {}
   }
 }
 
@@ -355,33 +368,65 @@ route("get", ["/callback"], async (req, res) => {
   try {
     const data = await load();
     if (!req.query.code) {
-      return res.status(400).send("طلب غير صالح أو انتهت صلاحية الجلسة.");
+      return res.redirect("/?auth_error=missing_code");
     }
     const callbackUrl = getCallbackUrl(req);
-    const tr = await fetch("https://discord.com/api/oauth2/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: CLIENT_ID,
-        client_secret: CLIENT_SECRET,
-        grant_type: "authorization_code",
-        code: req.query.code,
-        redirect_uri: callbackUrl
-      })
-    });
-    const t = await tr.json();
-    if (!t.access_token) {
-      console.error("Discord token exchange failed:", t);
-      return res.status(400).send("فشل تسجيل الدخول عبر ديسكورد. تأكد من تطابق رابط الـ Redirect URI في Discord Developer Portal.");
+    let accessToken = null;
+
+    // 1. محاولة استبدال الكود بالرابط المعتمد
+    try {
+      const tr = await fetch("https://discord.com/api/oauth2/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: CLIENT_ID,
+          client_secret: CLIENT_SECRET,
+          grant_type: "authorization_code",
+          code: req.query.code,
+          redirect_uri: callbackUrl
+        })
+      });
+      const t = await tr.json();
+      if (t.access_token) {
+        accessToken = t.access_token;
+      }
+    } catch(e) {}
+
+    // 2. إذا فشلت، نجرب الرابط البديل (/callback <-> /api/callback)
+    if (!accessToken) {
+      const altUrl = callbackUrl.includes("/api/callback")
+        ? callbackUrl.replace("/api/callback", "/callback")
+        : callbackUrl.replace("/callback", "/api/callback");
+      try {
+        const tr2 = await fetch("https://discord.com/api/oauth2/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            client_id: CLIENT_ID,
+            client_secret: CLIENT_SECRET,
+            grant_type: "authorization_code",
+            code: req.query.code,
+            redirect_uri: altUrl
+          })
+        });
+        const t2 = await tr2.json();
+        if (t2.access_token) {
+          accessToken = t2.access_token;
+        }
+      } catch(e) {}
     }
 
-    const h = { Authorization: "Bearer " + t.access_token };
+    if (!accessToken) {
+      console.error("Discord OAuth exchange failed completely");
+      return res.redirect("/?auth_error=exchange_failed");
+    }
+
+    const h = { Authorization: "Bearer " + accessToken };
     const u = await (await fetch("https://discord.com/api/users/@me", { headers: h })).json();
 
     let roles = [];
     const targetGuild = GUILD_ID || "1525115353003327578";
     if (targetGuild) {
-      // 1. محاولة جلب الرتب عبر توكن المستخدم
       try {
         const mr = await fetch(`https://discord.com/api/users/@me/guilds/${targetGuild}/member`, { headers: h });
         if (mr.ok) {
@@ -390,7 +435,6 @@ route("get", ["/callback"], async (req, res) => {
         }
       } catch(e) {}
 
-      // 2. إذا لم تتوفر رتب، نحاول عبر توكن البوت
       if (roles.length === 0) {
         const botTk = process.env.DISCORD_BOT_TOKEN || data.settings?.botToken || BOT_FALLBACK;
         if (botTk) {
@@ -411,43 +455,49 @@ route("get", ["/callback"], async (req, res) => {
     ROLE_IDS.forEach((rid, i) => {
       if (rid && roles.includes(rid) && (rank === null || i < rank)) rank = i;
     });
-    if ((OWNER_ID && u.id === OWNER_ID) || u.id === "1461832381185921076") rank = 0;
+
+    if ((OWNER_ID && u.id === OWNER_ID) || u.id === "1461832381185921076") {
+      rank = 0;
+    }
+
+    if (rank === null) {
+      const existing = (data.members || []).find(m => m.id === u.id);
+      if (existing) rank = existing.r;
+    }
+
+    // إذا كان المتقدم عضواً جديداً في الديسكورد، نمنحه رتبة New Phantom 👻 تلقائياً ليظهر فوراً في الهيكل
+    if (rank === null) {
+      rank = 8;
+    }
 
     const name = u.global_name || u.username;
     const avatar = u.avatar
       ? `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.${u.avatar.startsWith("a_") ? "gif" : "png"}`
       : `https://cdn.discordapp.com/embed/avatars/${(BigInt(u.id || "0") >> 22n) % 6n}.png`;
 
-    // تسجيل أو تحديث العضو تلقائياً في قائمة العائلة عند الدخول برتبة
-    if (rank !== null) {
-      const ex = data.members.find(m => m.id === u.id);
-      if (ex) {
-        ex.r = rank;
-        ex.n = name;
-        ex.avatar = avatar;
-      } else {
-        data.members.push({ uid: crypto.randomUUID(), n: name, id: u.id, r: rank, avatar });
-      }
-      await save(data);
-    }
+    const userObj = { id: u.id, name, avatar, rank };
+    req.session.user = userObj;
+    req.user = userObj;
 
-    // إذا لم تُجلب رتب من الديسكورد نفحص إذا كان العضو مسجلاً مسبقاً في الموقع
-    if (rank === null) {
-      const existing = data.members.find(m => m.id === u.id);
-      if (existing) rank = existing.r;
+    const ex = (data.members || []).find(m => m.id === u.id);
+    if (ex) {
+      ex.r = rank;
+      ex.n = name;
+      ex.avatar = avatar;
+    } else {
+      if (!data.members) data.members = [];
+      data.members.push({ uid: crypto.randomUUID(), n: name, id: u.id, r: rank, avatar });
     }
+    await save(data);
 
-    // إذا كان المتقدم عضواً جديداً ولم يحصل على رتبة إدارية بعد، نمنحه رتبة New Phantom 👻 تلقائياً ليظهر في الهيكل
-    if (rank === null) {
-      rank = 8; // New Phantom 👻
-    }
-
-    req.session.user = { id: u.id, name, avatar, rank };
-    const authToken = createAuthToken(req.session.user);
+    const authToken = createAuthToken(userObj);
+    res.setHeader("Set-Cookie", [
+      `phantoms_auth_tk=${authToken}; Path=/; Max-Age=1209600; SameSite=Lax`
+    ]);
     res.redirect("/?auth=" + encodeURIComponent(authToken));
   } catch (e) {
     console.error("Discord callback error:", e);
-    res.status(500).send("حدث خطأ أثناء معالجة تسجيل الدخول.");
+    res.redirect("/?auth_error=server_error");
   }
 });
 
