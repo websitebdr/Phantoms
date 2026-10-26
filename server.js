@@ -151,6 +151,11 @@ app.get(["/", "/index.html"], (req, res) => {
   res.sendFile(path.resolve("public/index.html"));
 });
 
+// فحص حالة الـ API
+app.get(["/api", "/api/"], (req, res) => {
+  res.json({ name: "Phantoms Gang Portal API", status: "online" });
+});
+
 const clip = (s, n) => String(s || "").trim().slice(0, n);
 const hasPanel = u => u && u.rank !== null && u.rank <= PANEL_MAX;
 const canManage = (u, targetRank) => hasPanel(u) && (u.rank === 0 || targetRank > u.rank);
@@ -176,22 +181,23 @@ const guard = (req, res, next) =>
   hasPanel(req.session.user) ? next() : res.status(403).json({ error: "غير مصرح لك بدخول هذه اللوحة" });
 
 // ---------- Discord OAuth & Auth ----------
-app.get("/login", (req, res) => {
+app.get(["/login", "/api/login"], (req, res) => {
   if (!CLIENT_ID || !CLIENT_SECRET) {
     // وضع المطور / تجريبي إذا لم تكن مفاتيح ديسكورد مضافة بعد
     return res.redirect("/?discord_unconfigured=1");
   }
+  const redirectUri = REDIRECT || `${req.protocol}://${req.get("host")}/api/callback`;
   req.session.state = crypto.randomBytes(16).toString("hex");
   const authUrl = "https://discord.com/oauth2/authorize?response_type=code" +
     "&scope=" + encodeURIComponent("identify guilds.members.read") +
     "&client_id=" + CLIENT_ID +
-    "&redirect_uri=" + encodeURIComponent(REDIRECT) +
+    "&redirect_uri=" + encodeURIComponent(redirectUri) +
     "&state=" + req.session.state;
   res.redirect(authUrl);
 });
 
 // مسار تجريبي محلي للمطور (يمكن تفعيله إذا لم تتوفر مفاتيح ديسكورد)
-app.post("/login/dev", wrap(async (req, res) => {
+app.post(["/login/dev", "/api/login/dev"], wrap(async (req, res) => {
   if (process.env.NODE_ENV === "production") return res.status(403).json({ error: "غير متاح في الإنتاج" });
   const roleType = req.body.role || "boss"; // 'boss' or 'guest'
   const data = await load();
@@ -207,12 +213,13 @@ app.post("/login/dev", wrap(async (req, res) => {
   res.json({ success: true, user: req.session.user });
 }));
 
-app.get("/callback", async (req, res) => {
+app.get(["/callback", "/api/callback"], async (req, res) => {
   try {
     const data = await load();
     if (!req.query.code || req.query.state !== req.session.state) {
       return res.status(400).send("طلب غير صالح أو انتهت صلاحية الجلسة.");
     }
+    const redirectUri = REDIRECT || `${req.protocol}://${req.get("host")}/api/callback`;
     const tr = await fetch("https://discord.com/api/oauth2/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -221,7 +228,7 @@ app.get("/callback", async (req, res) => {
         client_secret: CLIENT_SECRET,
         grant_type: "authorization_code",
         code: req.query.code,
-        redirect_uri: REDIRECT
+        redirect_uri: redirectUri
       })
     });
     const t = await tr.json();
@@ -274,12 +281,12 @@ app.get("/callback", async (req, res) => {
   }
 });
 
-app.get("/logout", (req, res) => {
+app.get(["/logout", "/api/logout"], (req, res) => {
   req.session = null;
   res.redirect("/");
 });
 
-app.get("/me", (req, res) => {
+app.get(["/me", "/api/me"], (req, res) => {
   res.json(req.session.user || null);
 });
 

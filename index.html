@@ -696,14 +696,14 @@ footer {
     </div>
 
     <div class="nav-actions">
-      <a class="btn dc" id="loginBtn" href="/login">
+      <a class="btn dc" id="loginBtn" href="/api/login">
         <i class="fa-brands fa-discord"></i> دخول بالديسكورد
       </a>
       <div class="user-pill" id="userPill">
         <div id="uavWrap"></div>
         <span id="uName"></span>
         <span class="user-rank-chip" id="uRank"></span>
-        <a class="btn ghost sm" href="/logout" title="تسجيل الخروج"><i class="fa-solid fa-power-off"></i></a>
+        <a class="btn ghost sm" href="/api/logout" title="تسجيل الخروج"><i class="fa-solid fa-power-off"></i></a>
       </div>
     </div>
   </div>
@@ -830,7 +830,7 @@ footer {
         <p style="color: var(--mu); max-width: 480px; margin: 0 auto 20px;">
           لضمان مصداقية التقديم وربط حسابك برولات العائلة في سيرفر الديسكورد، يرجى تسجيل الدخول أولاً بحساب ديسكورد الخاص بك.
         </p>
-        <a class="btn dc" href="/login"><i class="fa-brands fa-discord"></i> تسجيل الدخول بحساب ديسكورد</a>
+        <a class="btn dc" href="/api/login"><i class="fa-brands fa-discord"></i> تسجيل الدخول بحساب ديسكورد</a>
       </div>
 
       <form id="applyForm" onsubmit="submitApplication(event)">
@@ -1194,7 +1194,7 @@ async function loadSiteData() {
 // Fetch user data
 async function loadUser() {
   try {
-    const res = await fetch("/me");
+    const res = await fetch("/api/me");
     if (res.ok) {
       ME = await res.json();
       renderUser();
@@ -1853,7 +1853,7 @@ function closeDevLogin() { $("devLoginModal").classList.remove("active"); }
 
 async function submitDevLogin(role) {
   try {
-    const res = await fetch("/login/dev", {
+    const res = await fetch("/api/login/dev", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ role })
