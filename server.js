@@ -5,29 +5,46 @@ const fs = require("fs");
 const path = require("path");
 
 const {
-  CLIENT_ID = "",
-  CLIENT_SECRET = "",
-  REDIRECT = "http://localhost:3000/callback",
-  GUILD_ID = "",
-  OWNER_ID = "",
-  SECRET = "phantoms-super-secret-key-2026",
-  DISCORD_WEBHOOK_URL = "",
-  DISCORD_INVITE = "https://discord.gg/"
+  CLIENT_ID = "1563991637556863069",
+  CLIENT_SECRET = "ptU17kOOumJQObUxTScWtJF2XPrOu5h7",
+  REDIRECT = "https://phantoms-one.vercel.app/api/callback",
+  GUILD_ID = "1525115353003327578",
+  OWNER_ID = "1461832381185921076",
+  SECRET = "phantoms-volt-secret-key-2026",
+  DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1564199961170681896/cG2OaYTmvJlKOTOYILdNAES3ABYz7H9vXCWYfYlVrP9HKl0r9d1g0YbFK1P7CVZHAtWF",
+  DISCORD_INVITE = "https://discord.gg/5Pa2GNGUS"
 } = process.env;
 
-const ROLE_IDS = (process.env.ROLE_IDS || "").split(",").map(s => s.trim());
+const DEFAULT_ROLES = [
+  "1525118998260482078", // 0: Boss
+  "1525118181130113135", // 1: Co-Boss
+  "1563911145662840852", // 2: Manager
+  "1525119176773992569", // 3: Admin
+  "1563995546857906176", // 4: Interview Manager | مسؤول التقديمات
+  "1563176691617103892", // 5: GOLDEN MEMBER 🥇
+  "1563176075008413737", // 6: SILVER MEMBER 🥈
+  "1525118403956834315", // 7: PH™ MEMBER | فرد ⚔️
+  "1563174803161096192"  // 8: New Phantom 👻
+];
+
+const ROLE_IDS = process.env.ROLE_IDS
+  ? process.env.ROLE_IDS.split(",").map(s => s.trim())
+  : DEFAULT_ROLES;
+
 const PORT = process.env.PORT || 3000;
 const DB = path.join(__dirname, "data.json");
 
-// الرتب: 0 Boss, 1 Co-Boss, 2 Manager, 3 Admin, 4 Member, 5 Regular
-const PANEL_MAX = 3;   // الرتب المصرح لها بدخول لوحة التحكم (0..3)
-const SITE_MAX = 2;    // الرتب المصرح لها بتعديل نصوص الموقع والقوانين (0..2)
+// الرتب المصرح لها بدخول لوحة التحكم (من Boss حتى مسؤولي التقديمات 0..4)
+const PANEL_MAX = 4;
+// الرتب المصرح لها بتعديل نصوص الموقع والقوانين (0..2)
+const SITE_MAX = 2;
 
 const DEFAULT = {
   tagline: "عيلة مش زي أي عيلة. ولاء، قوة، وأسلوب ماشي بخطة تحت قيادة VOLT.",
-  serverName: "كيان رول بلاي",
-  discordInvite: DISCORD_INVITE || "https://discord.gg/",
-  about: "فانتومز (PHANTOMS) عائلة رول بلاي عريقة على سيرفر كيان، تأسست بهدف بناء اسم وهيبة تُحترم في كل شبر بالمدينة. نؤمن بأن الذكاء والولاء والترابط الأخوي أهم من مجرد حمل السلاح، ونسعى دائماً لتقديم أفضل سيناريوهات الرول بلاي والسيطرة باحترافية.",
+  serverName: "كيان رول بلاي [KYN]",
+  discordInvite: DISCORD_INVITE || "https://discord.gg/5Pa2GNGUS",
+  guildId: GUILD_ID,
+  about: "فانتومز (PHANTOMS) هي إحدى أعرق وأقوى العائلات في سيرفر كيان رول بلاي [KYN]. تأسست العائلة على مبادئ ثابتة: الذكاء والتخطيط والولاء الأخوي قبل السلاح. نتحكم في سيناريوهات المدينة باحترافية وهيبة تُحترم من الجميع، ونسعى دائماً لبناء مجتمع رول بلاي نظيف ومترابط.",
   rules: [
     { title: "الولاء التام والانضباط", desc: "خيانة العائلة أو تسريب أسرار المقرات والمخططات عقوبتها التصفية والطرد النهائي وبلاك ليست." },
     { title: "احترام التسلسل الإداري", desc: "أوامر البوس ونوابه نافذة بدون نقاش، ويجب احترام جميع الإداريين والأعضاء بغض النظر عن الرتبة." },
@@ -36,11 +53,12 @@ const DEFAULT = {
     { title: "المظهر الموحد وحضور الاجتماعات", desc: "الالتزام بلباس العائلة الرسمي وألوان المركبات المعتمدة، والتواجد الإجباري في التجمعات والنداءات الطارئة." }
   ],
   members: [
-    { uid: "seed-boss", n: "VOLT", id: OWNER_ID || "", r: 0, avatar: "" }
+    { uid: "seed-boss", n: "VOLT", id: OWNER_ID, r: 0, avatar: "" }
   ],
   creators: [
     { uid: "cr-1", n: "VOLT Live", platform: "Twitch", url: "https://twitch.tv/", avatar: "" },
-    { uid: "cr-2", n: "Phantoms Roleplay", platform: "YouTube", url: "https://youtube.com/", avatar: "" }
+    { uid: "cr-2", n: "Phantoms Roleplay", platform: "YouTube", url: "https://youtube.com/", avatar: "" },
+    { uid: "cr-3", n: "Phantoms Kick", platform: "Kick", url: "https://kick.com/", avatar: "" }
   ],
   applications: [],
   settings: {
@@ -73,12 +91,12 @@ async function load() {
     d = JSON.parse(JSON.stringify(DEFAULT));
     await save(d);
   }
-  // دمج الحقول الجديدة إذا كانت قديمة
   if (!d.rules) d.rules = DEFAULT.rules;
   if (!d.applications) d.applications = [];
   if (!d.settings) d.settings = DEFAULT.settings;
   if (!d.serverName) d.serverName = DEFAULT.serverName;
   if (!d.discordInvite) d.discordInvite = DEFAULT.discordInvite;
+  if (!d.creators) d.creators = DEFAULT.creators;
   return d;
 }
 
@@ -99,7 +117,7 @@ async function sendDiscordWebhook(webhookUrl, embed) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         username: "نظام فانتومز - التقديمات",
-        avatar_url: "https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/fivem.png",
+        avatar_url: "https://cdn.discordapp.com/icons/1525115353003327578/160270721afdfc2b180499e5469288a6.png",
         embeds: [embed]
       })
     });
@@ -124,9 +142,9 @@ app.use(session({
   sameSite: "lax",
   secure: process.env.NODE_ENV === "production"
 }));
+
 const publicPath = path.join(__dirname, "public");
 const cwdPublicPath = path.join(process.cwd(), "public");
-
 app.use(express.static(publicPath));
 app.use(express.static(cwdPublicPath));
 
@@ -138,6 +156,16 @@ try {
   try {
     HTML = fs.readFileSync(path.join(__dirname, "public", "index.html"), "utf8");
   } catch(e2) {}
+}
+
+// دالة مساعدة لتسجيل المسارات بـ /api وبدونها لتوافق كامل
+function route(method, paths, ...handlers) {
+  const allPaths = [];
+  paths.forEach(p => {
+    allPaths.push(p);
+    if (!p.startsWith("/api")) allPaths.push("/api" + p);
+  });
+  app[method](allPaths, ...handlers);
 }
 
 // توجيه الصفحة الرئيسية مباشرة
@@ -153,7 +181,7 @@ app.get(["/", "/index.html"], (req, res) => {
 
 // فحص حالة الـ API
 app.get(["/api", "/api/"], (req, res) => {
-  res.json({ name: "Phantoms Gang Portal API", status: "online" });
+  res.json({ name: "Phantoms Gang Portal API", status: "online", guild: "𝕻𝖍𝖆𝖓𝖙𝖔𝖒𝖘" });
 });
 
 const clip = (s, n) => String(s || "").trim().slice(0, n);
@@ -165,7 +193,7 @@ function publicData(u, data) {
   return {
     tagline: data.tagline,
     serverName: data.serverName,
-    discordInvite: data.discordInvite,
+    discordInvite: data.discordInvite || DEFAULT.discordInvite,
     about: data.about,
     rules: data.rules,
     creators: data.creators,
@@ -180,46 +208,57 @@ function publicData(u, data) {
 const guard = (req, res, next) =>
   hasPanel(req.session.user) ? next() : res.status(403).json({ error: "غير مصرح لك بدخول هذه اللوحة" });
 
+// دالة لمعرفة رابط الـ Callback الصحيح تلقائياً
+function getCallbackUrl(req) {
+  if (REDIRECT && !REDIRECT.includes("localhost")) return REDIRECT;
+  const proto = req.headers["x-forwarded-proto"] || req.protocol || "https";
+  const host = req.headers["x-forwarded-host"] || req.headers.host || "localhost:3000";
+  // يدعم كلاً من /callback و /api/callback
+  if (REDIRECT && REDIRECT.endsWith("/callback")) return `${proto}://${host}/callback`;
+  return `${proto}://${host}/api/callback`;
+}
+
 // ---------- Discord OAuth & Auth ----------
-app.get(["/login", "/api/login"], (req, res) => {
+route("get", ["/login"], (req, res) => {
   if (!CLIENT_ID || !CLIENT_SECRET) {
-    // وضع المطور / تجريبي إذا لم تكن مفاتيح ديسكورد مضافة بعد
     return res.redirect("/?discord_unconfigured=1");
   }
-  const redirectUri = REDIRECT || `${req.protocol}://${req.get("host")}/api/callback`;
+  const callbackUrl = getCallbackUrl(req);
   req.session.state = crypto.randomBytes(16).toString("hex");
   const authUrl = "https://discord.com/oauth2/authorize?response_type=code" +
     "&scope=" + encodeURIComponent("identify guilds.members.read") +
     "&client_id=" + CLIENT_ID +
-    "&redirect_uri=" + encodeURIComponent(redirectUri) +
+    "&redirect_uri=" + encodeURIComponent(callbackUrl) +
     "&state=" + req.session.state;
   res.redirect(authUrl);
 });
 
 // مسار تجريبي محلي للمطور (يمكن تفعيله إذا لم تتوفر مفاتيح ديسكورد)
-app.post(["/login/dev", "/api/login/dev"], wrap(async (req, res) => {
-  if (process.env.NODE_ENV === "production") return res.status(403).json({ error: "غير متاح في الإنتاج" });
-  const roleType = req.body.role || "boss"; // 'boss' or 'guest'
+route("post", ["/login/dev"], wrap(async (req, res) => {
+  if (process.env.NODE_ENV === "production" && CLIENT_ID) {
+    return res.status(403).json({ error: "وضع المطور غير مفعل في الإنتاج" });
+  }
+  const roleType = req.body.role || "boss";
   const data = await load();
   const rank = roleType === "boss" ? 0 : null;
   const name = roleType === "boss" ? (data.members[0]?.n || "VOLT (Boss)") : "متقدم تجريبي (Guest)";
-  const id = roleType === "boss" ? (OWNER_ID || "123456789012345678") : "987654321098765432";
+  const id = roleType === "boss" ? OWNER_ID : "987654321098765432";
   req.session.user = {
     id,
     name,
-    avatar: "",
+    avatar: "https://cdn.discordapp.com/icons/1525115353003327578/160270721afdfc2b180499e5469288a6.png",
     rank
   };
   res.json({ success: true, user: req.session.user });
 }));
 
-app.get(["/callback", "/api/callback"], async (req, res) => {
+route("get", ["/callback"], async (req, res) => {
   try {
     const data = await load();
     if (!req.query.code || req.query.state !== req.session.state) {
       return res.status(400).send("طلب غير صالح أو انتهت صلاحية الجلسة.");
     }
-    const redirectUri = REDIRECT || `${req.protocol}://${req.get("host")}/api/callback`;
+    const callbackUrl = getCallbackUrl(req);
     const tr = await fetch("https://discord.com/api/oauth2/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -228,21 +267,22 @@ app.get(["/callback", "/api/callback"], async (req, res) => {
         client_secret: CLIENT_SECRET,
         grant_type: "authorization_code",
         code: req.query.code,
-        redirect_uri: redirectUri
+        redirect_uri: callbackUrl
       })
     });
     const t = await tr.json();
     if (!t.access_token) {
       console.error("Discord token exchange failed:", t);
-      return res.status(400).send("فشل تسجيل الدخول عبر ديسكورد. تأكد من إعدادات الـ Redirect في Discord Developer Portal.");
+      return res.status(400).send("فشل تسجيل الدخول عبر ديسكورد. تأكد من تطابق رابط الـ Redirect URI في Discord Developer Portal.");
     }
 
     const h = { Authorization: "Bearer " + t.access_token };
     const u = await (await fetch("https://discord.com/api/users/@me", { headers: h })).json();
 
     let roles = [];
-    if (GUILD_ID) {
-      const mr = await fetch(`https://discord.com/api/users/@me/guilds/${GUILD_ID}/member`, { headers: h });
+    const targetGuild = GUILD_ID || "1525115353003327578";
+    if (targetGuild) {
+      const mr = await fetch(`https://discord.com/api/users/@me/guilds/${targetGuild}/member`, { headers: h });
       if (mr.ok) {
         const gm = await mr.json();
         roles = gm.roles || [];
@@ -281,23 +321,23 @@ app.get(["/callback", "/api/callback"], async (req, res) => {
   }
 });
 
-app.get(["/logout", "/api/logout"], (req, res) => {
+route("get", ["/logout"], (req, res) => {
   req.session = null;
   res.redirect("/");
 });
 
-app.get(["/me", "/api/me"], (req, res) => {
+route("get", ["/me"], (req, res) => {
   res.json(req.session.user || null);
 });
 
 // ---------- Public Site Data ----------
-app.get("/api/site", wrap(async (req, res) => {
+route("get", ["/site"], wrap(async (req, res) => {
   const data = await load();
   res.json(publicData(req.session.user, data));
 }));
 
 // تعديل محتوى الموقع والقوانين (للرتب العليا فقط: Boss, Co-Boss, Manager)
-app.post("/api/site", guard, wrap(async (req, res) => {
+route("post", ["/site"], guard, wrap(async (req, res) => {
   const data = await load();
   const u = req.session.user;
   if (u.rank > SITE_MAX) return res.status(403).json({ error: "تعديل المحتوى مخصص للقيادة العليا فقط" });
@@ -327,7 +367,7 @@ app.post("/api/site", guard, wrap(async (req, res) => {
 // ---------- نظام التقديم في العائلة (Applications) ----------
 
 // تقديم طلب جديد
-app.post("/api/apply", wrap(async (req, res) => {
+route("post", ["/apply"], wrap(async (req, res) => {
   const data = await load();
   if (data.settings && data.settings.allowApplications === false) {
     return res.status(400).json({ error: "عذراً، باب التقديم في العائلة مغلق حالياً." });
@@ -374,7 +414,7 @@ app.post("/api/apply", wrap(async (req, res) => {
     scenarioFearRP,
     reason,
     extra,
-    status: "pending", // pending, accepted, rejected
+    status: "pending",
     decisionNote: "",
     decisionBy: null,
     createdAt: new Date().toISOString(),
@@ -388,8 +428,8 @@ app.post("/api/apply", wrap(async (req, res) => {
   const hookUrl = data.settings?.webhookUrl || DISCORD_WEBHOOK_URL;
   if (hookUrl) {
     const embed = {
-      title: "📋 تقديم جديد للانضمام لعائلة فانتومز (PHANTOMS)",
-      color: 0xc8893b,
+      title: "📋 تقديم جديد للانضمام لعائلة فانتومز 𝕻𝖍𝖆𝖓𝖙𝖔𝖒𝖘 [KYN]",
+      color: 0xc98a4b, // Warm gang bronze gold
       thumbnail: { url: u.avatar || undefined },
       fields: [
         { name: "👤 المتقدم (ديسكورد)", value: `<@${u.id}> (${u.name})`, inline: true },
@@ -403,7 +443,7 @@ app.post("/api/apply", wrap(async (req, res) => {
         { name: "💡 سبب اختيار فانتومز", value: reason },
         { name: "🔗 كليبات أو ملاحظات", value: extra || "لا يوجد" }
       ],
-      footer: { text: "بوابة فانتومز FiveM • راجع الطلب من لوحة التحكم" },
+      footer: { text: "بوابة فانتومز رول بلاي • راجع الطلب من لوحة التحكم" },
       timestamp: new Date().toISOString()
     };
     sendDiscordWebhook(hookUrl, embed);
@@ -413,7 +453,7 @@ app.post("/api/apply", wrap(async (req, res) => {
 }));
 
 // الاستعلام عن طلب التقديم الخاص بالمستخدم الحالي
-app.get("/api/my-application", wrap(async (req, res) => {
+route("get", ["/my-application"], wrap(async (req, res) => {
   const u = req.session.user;
   if (!u) return res.json({ application: null });
   const data = await load();
@@ -422,13 +462,13 @@ app.get("/api/my-application", wrap(async (req, res) => {
 }));
 
 // جلب كل التقديمات للإدارة
-app.get("/api/applications", guard, wrap(async (req, res) => {
+route("get", ["/applications"], guard, wrap(async (req, res) => {
   const data = await load();
   res.json({ applications: data.applications || [] });
 }));
 
 // تحديث حالة تقديم (قبول أو رفض)
-app.patch("/api/applications/:id", guard, wrap(async (req, res) => {
+route("patch", ["/applications/:id"], guard, wrap(async (req, res) => {
   const data = await load();
   const u = req.session.user;
   const appItem = (data.applications || []).find(a => a.id === req.params.id);
@@ -488,7 +528,7 @@ app.patch("/api/applications/:id", guard, wrap(async (req, res) => {
 }));
 
 // حذف تقديم
-app.delete("/api/applications/:id", guard, wrap(async (req, res) => {
+route("delete", ["/applications/:id"], guard, wrap(async (req, res) => {
   const data = await load();
   data.applications = (data.applications || []).filter(a => a.id !== req.params.id);
   await save(data);
@@ -496,7 +536,7 @@ app.delete("/api/applications/:id", guard, wrap(async (req, res) => {
 }));
 
 // ---------- إدارة الأعضاء والرتب (Members) ----------
-app.post("/api/members", guard, wrap(async (req, res) => {
+route("post", ["/members"], guard, wrap(async (req, res) => {
   const data = await load();
   const u = req.session.user;
   const r = Number(req.body.r);
@@ -512,7 +552,7 @@ app.post("/api/members", guard, wrap(async (req, res) => {
   res.json(publicData(u, data));
 }));
 
-app.patch("/api/members/:uid", guard, wrap(async (req, res) => {
+route("patch", ["/members/:uid"], guard, wrap(async (req, res) => {
   const data = await load();
   const u = req.session.user;
   const m = data.members.find(x => x.uid === req.params.uid);
@@ -527,7 +567,7 @@ app.patch("/api/members/:uid", guard, wrap(async (req, res) => {
   res.json(publicData(u, data));
 }));
 
-app.delete("/api/members/:uid", guard, wrap(async (req, res) => {
+route("delete", ["/members/:uid"], guard, wrap(async (req, res) => {
   const data = await load();
   const u = req.session.user;
   const m = data.members.find(x => x.uid === req.params.uid);
@@ -540,7 +580,7 @@ app.delete("/api/members/:uid", guard, wrap(async (req, res) => {
 }));
 
 // ---------- إدارة صناع المحتوى والبثوث (Creators & Streams) ----------
-app.post("/api/creators", guard, wrap(async (req, res) => {
+route("post", ["/creators"], guard, wrap(async (req, res) => {
   const data = await load();
   const n = clip(req.body.n, 50);
   const platform = clip(req.body.platform, 30) || "Twitch";
@@ -561,7 +601,7 @@ app.post("/api/creators", guard, wrap(async (req, res) => {
   res.json(publicData(req.session.user, data));
 }));
 
-app.patch("/api/creators/:uid", guard, wrap(async (req, res) => {
+route("patch", ["/creators/:uid"], guard, wrap(async (req, res) => {
   const data = await load();
   const c = data.creators.find(x => x.uid === req.params.uid);
   if (!c) return res.status(404).json({ error: "صانع المحتوى غير موجود" });
@@ -575,7 +615,7 @@ app.patch("/api/creators/:uid", guard, wrap(async (req, res) => {
   res.json(publicData(req.session.user, data));
 }));
 
-app.delete("/api/creators/:uid", guard, wrap(async (req, res) => {
+route("delete", ["/creators/:uid"], guard, wrap(async (req, res) => {
   const data = await load();
   data.creators = data.creators.filter(c => c.uid !== req.params.uid);
   await save(data);
@@ -588,7 +628,8 @@ if (require.main === module) {
     console.log(`\n==============================================`);
     console.log(`  🦅 Phantoms Gang Portal is Running!`);
     console.log(`  🌐 Website: http://localhost:${PORT}`);
-    console.log(`  💬 Discord OAuth: ${CLIENT_ID ? "Configured" : "Not configured yet (Dev mode ready)"}`);
+    console.log(`  💬 Discord Guild ID: ${GUILD_ID}`);
+    console.log(`  🔗 Invite: ${DISCORD_INVITE}`);
     console.log(`==============================================\n`);
   });
 }
