@@ -115,6 +115,22 @@ const wrap = fn => (req, res) => fn(req, res).catch(e => {
 
 const app = express();
 app.set("trust proxy", 1);
+
+// استعادة المسار الحقيقي للطلب عند استضافته على Vercel Serverless
+app.use((req, res, next) => {
+  const realPath = req.headers["x-matched-path"] || req.headers["x-forwarded-uri"] || req.headers["x-vercel-matched-path"];
+  if (realPath && (req.url === "/api" || req.url === "/api/" || req.url === "/api/index.js" || req.url.startsWith("/api?"))) {
+    const qIdx = req.url.indexOf("?");
+    const query = qIdx !== -1 ? req.url.slice(qIdx) : "";
+    req.url = realPath + query;
+  }
+  next();
+});
+
+app.get("/api", (req, res) => {
+  res.json({ name: "Phantoms Gang Portal API", status: "online" });
+});
+
 app.use(express.json({ limit: "50kb" }));
 app.use(session({
   name: "phantoms_sess",
