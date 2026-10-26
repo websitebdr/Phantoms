@@ -1257,6 +1257,11 @@ footer {
 <div id="toast"></div>
 
 <script>
+// الحالة العامة للموقع والمستخدم (Global State)
+let ME = null;
+let APPS = [];
+let currentFilter = "all";
+
 const RANKS = [
   ["Boss", "البوس - قائد العائلة 👑", "القيادة العليا وإصدار القرارات المصيرية"],
   ["Co-Boss", "نائب البوس 🛡️", "إدارة العمليات والنيابة عن القائد"],
@@ -1319,6 +1324,19 @@ const RANKS = [
       try { localStorage.setItem("phantoms_user", JSON.stringify(ME)); } catch(e) {}
     }
 
+    // استرجاع المستخدم من الذاكرة المحلية إذا لم يكن محدداً
+    if (!ME) {
+      try {
+        const cached = localStorage.getItem("phantoms_user");
+        if (cached) ME = JSON.parse(cached);
+      } catch(e) {}
+    }
+
+    // تنظيف شريط الرابط
+    if (a || uid || code) {
+      try { window.history.replaceState({}, document.title, window.location.pathname); } catch(e) {}
+    }
+
     // 3. إذا وصل كود ديسكورد مباشرة إلى الصفحة الرئيسية (?code=...)
     if (code) {
       showToast("جاري تأكيد تسجيل الدخول عبر ديسكورد...");
@@ -1344,15 +1362,7 @@ const RANKS = [
         });
     }
 
-    if (a || uid || code) {
-      window.history.replaceState({}, document.title, window.location.pathname);
-    } else {
-      // استرجاع المستخدم المحفوظ مسبقاً من الذاكرة لعدم حدوث وميض
-      try {
-        const cached = localStorage.getItem("phantoms_user");
-        if (cached) ME = JSON.parse(cached);
-      } catch(e) {}
-    }
+
   } catch(e) {
     console.warn("Auth init error:", e);
   }
@@ -1410,9 +1420,6 @@ let S = {
   settings: { allowApplications: true, webhookConfigured: false }
 };
 
-let ME = null;
-let APPS = [];
-let currentFilter = "all";
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s || "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
