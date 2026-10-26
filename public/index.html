@@ -753,7 +753,7 @@ footer {
         <div id="uavWrap"></div>
         <span id="uName"></span>
         <span class="user-rank-chip" id="uRank"></span>
-        <a class="btn ghost sm" href="/api/logout" title="تسجيل الخروج"><i class="fa-solid fa-power-off"></i></a>
+        <a class="btn ghost sm" href="javascript:void(0)" onclick="logoutUser()" title="تسجيل الخروج"><i class="fa-solid fa-power-off"></i></a>
       </div>
     </div>
   </div>
@@ -1266,6 +1266,29 @@ const RANKS = [
   ["New Phantom", "مستجد 👻", "عضو جديد تحت الملاحظة والتقييم"]
 ];
 
+
+// استخراج وحفظ توكن تسجيل الدخول من الرابط لضمان الجلسة بنسبة 100%
+(function initAuth() {
+  const p = new URLSearchParams(window.location.search);
+  const a = p.get("auth");
+  if (a) {
+    localStorage.setItem("phantoms_auth", a);
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+})();
+
+function getAuthHeaders(extra = {}) {
+  const token = localStorage.getItem("phantoms_auth");
+  const headers = Object.assign({}, extra);
+  if (token) headers["Authorization"] = "Bearer " + token;
+  return headers;
+}
+
+function logoutUser() {
+  localStorage.removeItem("phantoms_auth");
+  window.location.href = "/api/logout";
+}
+
 let S = {
   tagline: "عيلة مش زي أي عيلة. ولاء، قوة، وأسلوب ماشي بخطة تحت قيادة VOLT.",
   serverName: "كيان رول بلاي [KYN]",
@@ -1338,7 +1361,7 @@ async function loadSiteData() {
 // Fetch user data via /api/me
 async function loadUser() {
   try {
-    const res = await fetch("/api/me");
+    const res = await fetch("/api/me", { headers: getAuthHeaders() });
     if (res.ok) {
       ME = await res.json();
       renderUser();
@@ -1537,7 +1560,7 @@ async function submitApplication(e) {
   try {
     const res = await fetch("/api/apply", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(payload)
     });
     const result = await res.json();
@@ -1583,7 +1606,7 @@ function populateStaffPanel() {
 async function loadApplications() {
   if (!isStaff()) return;
   try {
-    const res = await fetch("/api/applications");
+    const res = await fetch("/api/applications", { headers: getAuthHeaders() });
     if (res.ok) {
       const data = await res.json();
       APPS = data.applications || [];

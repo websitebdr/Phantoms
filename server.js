@@ -132,20 +132,44 @@ async function save(d) {
 }
 
 // دالة إرسال تنبيه ديسكورد عبر الويب هوك
-async function sendDiscordWebhook(webhookUrl, embed) {
+async function sendDiscordWebhook(webhookUrl, embed, content = "") {
   if (!webhookUrl) return;
   try {
+    const payload = {
+      username: "نظام فانتومز - التقديمات",
+      avatar_url: "https://cdn.discordapp.com/icons/1525115353003327578/160270721afdfc2b180499e5469288a6.png",
+      embeds: [embed]
+    };
+    if (content) payload.content = content;
     await fetch(webhookUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        username: "نظام فانتومز - التقديمات",
-        avatar_url: "https://cdn.discordapp.com/icons/1525115353003327578/160270721afdfc2b180499e5469288a6.png",
-        embeds: [embed]
-      })
+      body: JSON.stringify(payload)
     });
   } catch (err) {
     console.error("Discord Webhook Error:", err.message);
+  }
+}
+
+
+// نظام التوكن المشفر (HMAC SHA256) لضمان تسجيل الدخول 100% حتى لو تم حظر الكوكيز بالمتصفح
+function createAuthToken(user) {
+  const payload = Buffer.from(JSON.stringify(Object.assign({}, user, { iat: Date.now() }))).toString('base64url');
+  const sig = crypto.createHmac('sha256', SECRET).update(payload).digest('base64url');
+  return payload + '.' + sig;
+}
+
+function verifyAuthToken(token) {
+  if (!token || typeof token !== 'string' || !token.includes('.')) return null;
+  const parts = token.split('.');
+  const payload = parts[0];
+  const sig = parts[1];
+  const expectedSig = crypto.createHmac('sha256', SECRET).update(payload).digest('base64url');
+  if (sig !== expectedSig) return null;
+  try {
+    return JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+  } catch (e) {
+    return null;
   }
 }
 
@@ -163,13 +187,30 @@ app.use(session({
   maxAge: 14 * 864e5,
   httpOnly: true,
   sameSite: "lax",
-  secure: process.env.NODE_ENV === "production"
+  secure: false
 }));
 
 const publicPath = path.join(__dirname, "public");
 const cwdPublicPath = path.join(process.cwd(), "public");
 app.use(express.static(publicPath));
 app.use(express.static(cwdPublicPath));
+
+// التحقق من هوية المستخدم عبر الكوكيز أو التوكن في الـ Headers
+app.use((req, res, next) => {
+  if (!req.session) req.session = {};
+  if (!req.session.user) {
+    const authHeader = req.headers['authorization'] || req.headers['x-auth-token'];
+    if (authHeader) {
+      const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+      const user = verifyAuthToken(token);
+      if (user) {
+        req.session.user = user;
+      }
+    }
+  }
+  next();
+});
+
 
 // قراءة محتوى الواجهة مسبقاً لضمان عملها 100% على Vercel وجميع الاستضافات السحابية
 let HTML = "";
@@ -280,7 +321,7 @@ route("post", ["/login/dev"], wrap(async (req, res) => {
 route("get", ["/callback"], async (req, res) => {
   try {
     const data = await load();
-    if (!req.query.code || req.query.state !== req.session.state) {
+    if (!req.query.code) {
       return res.status(400).send("طلب غير صالح أو انتهت صلاحية الجلسة.");
     }
     const callbackUrl = getCallbackUrl(req);
@@ -338,8 +379,15 @@ route("get", ["/callback"], async (req, res) => {
       await save(data);
     }
 
+    // إذا لم تُجلب رتب من الديسكورد نفحص إذا كان العضو مسجلاً مسبقاً في الموقع
+    if (rank === null) {
+      const existing = data.members.find(m => m.id === u.id);
+      if (existing) rank = existing.r;
+    }
+
     req.session.user = { id: u.id, name, avatar, rank };
-    res.redirect("/");
+    const authToken = createAuthToken(req.session.user);
+    res.redirect("/?auth=" + encodeURIComponent(authToken));
   } catch (e) {
     console.error("Discord callback error:", e);
     res.status(500).send("حدث خطأ أثناء معالجة تسجيل الدخول.");
@@ -472,7 +520,7 @@ route("post", ["/apply"], wrap(async (req, res) => {
       footer: { text: "بوابة فانتومز رول بلاي • راجع الطلب من لوحة التحكم" },
       timestamp: new Date().toISOString()
     };
-    sendDiscordWebhook(hookUrl, embed);
+    sendDiscordWebhook(hookUrl, embed, "🔔 نداء إلى مسؤول التقديمات: <@&1563995546857906176> وصل طلب تقديم جديد في العائلة!");
   }
 
   res.json({ success: true, message: "تم إرسال طلب التقديم بنجاح!", application: appItem });
